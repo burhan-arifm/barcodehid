@@ -1,569 +1,1046 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0a0a0f">
-<title>BarcodeHID</title>
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg:       #0a0a0f;
-  --surface:  #12121a;
-  --border:   #1e1e2e;
-  --accent:   #00e5a0;
-  --accent2:  #00b8ff;
-  --warn:     #ffa502;
-  --danger:   #ff4757;
-  --text:     #e8e8f0;
-  --dim:      #5a5a7a;
-  --r:        12px;
-  --mono:     'Courier New', monospace;
-}
-
-html, body { height: 100%; background: var(--bg); color: var(--text);
-             font-family: var(--mono); overflow: hidden; }
-
-/* ── Layout ── */
-#app { display: flex; flex-direction: column; height: 100dvh;
-       max-width: 480px; margin: 0 auto; }
-
-/* ── Header ── */
-#header { display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 16px 10px; border-bottom: 1px solid var(--border);
-          flex-shrink: 0; }
-
-#logo { font-size: 13px; font-weight: bold; letter-spacing: 3px;
-        color: var(--accent); text-transform: uppercase; }
-#logo span { color: var(--dim); }
-
-#status-pill { display: flex; align-items: center; gap: 6px; font-size: 11px;
-               letter-spacing: 1px; padding: 4px 10px; border-radius: 20px;
-               border: 1px solid var(--border); background: var(--surface);
-               transition: all 0.3s; }
-#status-dot { width: 7px; height: 7px; border-radius: 50%;
-              background: var(--dim); transition: background 0.3s; }
-
-#status-pill.connected   { border-color: var(--accent); }
-#status-pill.connected   #status-dot { background: var(--accent);
-                                        box-shadow: 0 0 6px var(--accent); }
-#status-pill.connecting  { border-color: var(--warn); }
-#status-pill.connecting  #status-dot { background: var(--warn);
-                                        animation: blink 1s infinite; }
-#status-pill.error       { border-color: var(--danger); }
-#status-pill.error       #status-dot { background: var(--danger); }
-
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-
-/* ── Viewfinder ── */
-#viewfinder-wrap { position: relative; flex: 0 0 auto; aspect-ratio: 1/1;
-                   background: #000; overflow: hidden; }
-#video { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.corner { position: absolute; width: 28px; height: 28px;
-          border-color: var(--accent); border-style: solid; opacity: .9; }
-.corner.tl { top:20px;    left:20px;  border-width:3px 0 0 3px; border-radius:4px 0 0 0; }
-.corner.tr { top:20px;    right:20px; border-width:3px 3px 0 0; border-radius:0 4px 0 0; }
-.corner.bl { bottom:20px; left:20px;  border-width:0 0 3px 3px; border-radius:0 0 0 4px; }
-.corner.br { bottom:20px; right:20px; border-width:0 3px 3px 0; border-radius:0 0 4px 0; }
-
-#scan-line { position: absolute; left:20px; right:20px; height:2px;
-  background: linear-gradient(90deg, transparent, rgba(0,229,160,.6), transparent);
-  box-shadow: 0 0 8px rgba(0,229,160,.6);
-  animation: scanline 2.4s ease-in-out infinite; pointer-events: none; }
-@keyframes scanline {
-  0%   { top:20px; opacity:0; }
-  10%  { opacity:1; }
-  90%  { opacity:1; }
-  100% { top:calc(100% - 20px); opacity:0; }
-}
-
-#flash { position:absolute; inset:0; background:rgba(0,229,160,.25);
-         opacity:0; pointer-events:none; transition:opacity .05s; }
-#flash.on { opacity:1; }
-
-#last-badge { position:absolute; bottom:12px; left:12px; right:12px;
-  background:rgba(10,10,15,.85); backdrop-filter:blur(8px);
-  border:1px solid var(--accent); border-radius:var(--r);
-  padding:8px 12px; font-size:13px; letter-spacing:1px; color:var(--accent);
-  text-align:center; opacity:0; transform:translateY(4px);
-  transition:all .2s; word-break:break-all; }
-#last-badge.show { opacity:1; transform:translateY(0); }
-
-/* ── Controls ── */
-#controls { display:flex; align-items:center; gap:10px; padding:10px 16px;
-            border-bottom:1px solid var(--border); flex-shrink:0; flex-wrap:wrap; }
-
-.toggle-label { font-size:10px; letter-spacing:2px; color:var(--dim);
-                text-transform:uppercase; flex-shrink:0; }
-
-.toggle { position:relative; width:42px; height:24px; cursor:pointer; flex-shrink:0; }
-.toggle input { display:none; }
-.toggle-track { position:absolute; inset:0; background:var(--border);
-                border-radius:12px; transition:background .25s; }
-.toggle input:checked ~ .toggle-track { background:var(--accent); }
-.toggle-thumb { position:absolute; top:3px; left:3px; width:18px; height:18px;
-  background:#fff; border-radius:50%; transition:transform .25s;
-  box-shadow:0 1px 4px rgba(0,0,0,.4); }
-.toggle input:checked ~ .toggle-thumb { transform:translateX(18px); }
-
-.toggle-val { font-size:11px; letter-spacing:1px; min-width:32px; }
-#enter-label { color:var(--accent); }
-
-.badge { font-size:9px; padding:2px 6px; border-radius:4px; letter-spacing:1px;
-         border:1px solid var(--border); flex-shrink:0; }
-#hid-badge  { color:var(--dim); background:rgba(0,229,160,.05); display:none; }
-#count-badge { margin-left:auto; color:var(--dim); background:none; border:none; }
-#count-badge span { color:var(--accent); }
-
-/* ── Log ── */
-#log-header { display:flex; align-items:center; justify-content:space-between;
-              padding:8px 16px 6px; flex-shrink:0; }
-#log-title { font-size:10px; letter-spacing:3px; color:var(--dim); text-transform:uppercase; }
-#clear-btn { font-size:10px; letter-spacing:1px; color:var(--dim); background:none;
-  border:1px solid var(--border); border-radius:6px; padding:2px 8px;
-  cursor:pointer; font-family:inherit; transition:all .2s; }
-#clear-btn:hover { border-color:var(--danger); color:var(--danger); }
-
-#log { flex:1; overflow-y:auto; padding:0 16px 16px; }
-#log::-webkit-scrollbar { width:3px; }
-#log::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-
-.log-empty { text-align:center; color:var(--dim); font-size:12px;
-             letter-spacing:2px; padding-top:24px; }
-.log-item { display:flex; align-items:baseline; gap:10px; padding:7px 0;
-            border-bottom:1px solid var(--border); animation:slideIn .2s ease-out; }
-@keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
-
-.log-time  { font-size:10px; color:var(--dim); flex-shrink:0; }
-.log-value { font-size:13px; color:var(--text); word-break:break-all; flex:1; }
-.log-tag   { font-size:9px; padding:2px 5px; border-radius:4px; letter-spacing:1px; flex-shrink:0; }
-.log-tag.enter { background:rgba(0,229,160,.12); color:var(--accent); }
-.log-tag.val   { background:rgba(0,184,255,.12); color:var(--accent2); }
-
-/* ── Overlay ── */
-#overlay { position:fixed; inset:0; background:rgba(10,10,15,.96);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:16px; z-index:100; padding:32px; text-align:center; }
-#overlay.hidden { display:none; }
-#overlay-icon  { font-size:48px; }
-#overlay-title { font-size:16px; font-weight:bold; letter-spacing:3px;
-                 text-transform:uppercase; color:var(--accent); }
-#overlay-msg   { font-size:13px; color:var(--dim); line-height:1.7;
-                 letter-spacing:.5px; max-width:300px; }
-#overlay-err   { font-size:11px; color:var(--danger); letter-spacing:1px;
-                 max-width:300px; min-height:16px; }
-
-#url-wrap { display:flex; flex-direction:column; gap:8px; width:100%; max-width:300px; }
-#url-label { font-size:10px; letter-spacing:2px; color:var(--dim); text-align:left; }
-#url-input { background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
-  color:var(--text); font-family:var(--mono); font-size:14px; padding:10px 14px;
-  width:100%; outline:none; letter-spacing:.5px; transition:border-color .2s; }
-#url-input:focus { border-color:var(--accent); }
-
-#connect-btn { background:var(--accent); color:#0a0a0f; border:none;
-  border-radius:var(--r); font-family:var(--mono); font-size:13px; font-weight:bold;
-  letter-spacing:3px; text-transform:uppercase; padding:12px 24px;
-  cursor:pointer; width:100%; max-width:300px; transition:opacity .2s, transform .1s; }
-#connect-btn:active { transform:scale(.97); opacity:.85; }
-</style>
-</head>
-<body>
-<div id="app">
-  <div id="header">
-    <div id="logo">Barcode<span>HID</span></div>
-    <div id="status-pill">
-      <div id="status-dot"></div>
-      <span id="status-text">OFFLINE</span>
-    </div>
-  </div>
-
-  <div id="viewfinder-wrap">
-    <video id="video" autoplay muted playsinline></video>
-    <div class="corner tl"></div><div class="corner tr"></div>
-    <div class="corner bl"></div><div class="corner br"></div>
-    <div id="scan-line"></div>
-    <div id="flash"></div>
-    <div id="last-badge"></div>
-  </div>
-
-  <div id="controls">
-    <span class="toggle-label">Enter</span>
-    <label class="toggle">
-      <input type="checkbox" id="enter-toggle" checked>
-      <div class="toggle-track"></div>
-      <div class="toggle-thumb"></div>
-    </label>
-    <span class="toggle-val" id="enter-label">ON</span>
-
-    <span class="toggle-label" style="margin-left:8px">Beep</span>
-    <label class="toggle">
-      <input type="checkbox" id="beep-toggle" checked>
-      <div class="toggle-track"></div>
-      <div class="toggle-thumb"></div>
-    </label>
-
-    <div class="badge" id="hid-badge">HID</div>
-    <div class="badge" id="count-badge">SCANS: <span id="scan-count">0</span></div>
-  </div>
-
-  <div id="log-header">
-    <span id="log-title">Scan History</span>
-    <button id="clear-btn" onclick="clearLog()">CLEAR</button>
-  </div>
-  <div id="log">
-    <div class="log-empty" id="log-empty">— awaiting scans —</div>
-  </div>
-</div>
-
-<!-- Connection overlay -->
-<div id="overlay">
-  <div id="overlay-icon">📡</div>
-  <div id="overlay-title">Connect to PC</div>
-  <div id="overlay-msg">Enter the WebSocket address shown in your terminal, or scan the QR code.</div>
-  <div id="overlay-err"></div>
-  <div id="url-wrap">
-    <div id="url-label">SERVER ADDRESS</div>
-    <input id="url-input" type="text" placeholder="wss://192.168.1.x:8765"
-           autocomplete="off" autocorrect="off" spellcheck="false">
-  </div>
-  <button id="connect-btn" onclick="connect()">CONNECT</button>
-</div>
-
-<script>
-// ── ZXing loader with CDN fallback ────────────────────────────────────────────
-(function() {
-  const cdns = [
-    'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.1/umd/index.min.js',
-    'https://unpkg.com/@zxing/library@0.21.1/umd/index.min.js',
-  ];
-  let idx = 0;
-  function tryLoad() {
-    if (idx >= cdns.length) {
-      document.getElementById('overlay-err').textContent =
-        '❌ Failed to load barcode library. Check internet and reload.';
-      return;
-    }
-    const s  = document.createElement('script');
-    s.src    = cdns[idx++];
-    s.onload = () => {
-      if (window.ZXingLib) window.ZXing = window.ZXingLib;
-      if (!window.ZXing || !window.ZXing.BrowserMultiFormatReader) {
-        tryLoad(); return;
-      }
-    };
-    s.onerror = () => tryLoad();
-    document.head.appendChild(s);
-  }
-  tryLoad();
-})();
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let ws         = null;
-let scanCount  = 0;
-let isScanning = false;
-let codeReader = null;
-let lastValue  = null;
-let lastScanTs = 0;
-let audioCtx   = null;
-let beepBuffer = null;    // decoded AudioBuffer if mp3 was embedded
-let serverHasBeep = false;
-const DEBOUNCE_MS = 2000;
-
-// ── UI refs ───────────────────────────────────────────────────────────────────
-const pill       = document.getElementById('status-pill');
-const dot        = document.getElementById('status-dot');
-const statusText = document.getElementById('status-text');
-const overlay    = document.getElementById('overlay');
-const overlayMsg = document.getElementById('overlay-msg');
-const overlayErr = document.getElementById('overlay-err');
-const urlInput   = document.getElementById('url-input');
-const enterToggle= document.getElementById('enter-toggle');
-const enterLabel = document.getElementById('enter-label');
-const beepToggle = document.getElementById('beep-toggle');
-const countEl    = document.getElementById('scan-count');
-const lastBadge  = document.getElementById('last-badge');
-const flashEl    = document.getElementById('flash');
-const logEl      = document.getElementById('log');
-const logEmpty   = document.getElementById('log-empty');
-const hidBadge   = document.getElementById('hid-badge');
-
-// ── Persist / restore URL ─────────────────────────────────────────────────────
-function deriveWSUrl() {
-  const l = window.location;
-  if (!l.hostname) return null;
-  const scheme = l.protocol === 'https:' ? 'wss:' : 'ws:';
-  const port   = l.port || (scheme === 'wss:' ? '443' : '80');
-  return `${scheme}//${l.hostname}:${port}`;
-}
-
-const derived  = deriveWSUrl();
-const saved    = (localStorage.getItem('bhid-url') || '').replace(/^ws:\/\//, 'wss://');
-const initUrl  = derived || saved || '';
-if (initUrl) urlInput.value = initUrl;
-
-enterToggle.addEventListener('change', () => {
-  enterLabel.textContent = enterToggle.checked ? 'ON' : 'OFF';
-});
-
-// ── Audio ─────────────────────────────────────────────────────────────────────
-function getAudioCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-
-// Synthesize a short scanner beep via Web Audio (fallback when no mp3)
-function synthBeep() {
-  try {
-    const ctx = getAudioCtx();
-    const osc = ctx.createOscillator();
-    const gain= ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type            = 'square';
-    osc.frequency.value = 1800;
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.08);
-  } catch(e) {}
-}
-
-async function loadBeepMp3() {
-  try {
-    const res = await fetch('/beep.mp3');
-    if (!res.ok) return;
-    const buf = await res.arrayBuffer();
-    beepBuffer = await getAudioCtx().decodeAudioData(buf);
-  } catch(e) {
-    beepBuffer = null;
-  }
-}
-
-function playBeep() {
-  if (!beepToggle.checked) return;
-  if (beepBuffer) {
-    try {
-      const ctx  = getAudioCtx();
-      const src  = ctx.createBufferSource();
-      src.buffer = beepBuffer;
-      src.connect(ctx.destination);
-      src.start();
-    } catch(e) { synthBeep(); }
-  } else {
-    synthBeep();
-  }
-}
-
-// ── WebSocket ─────────────────────────────────────────────────────────────────
-function setStatus(state, text) {
-  pill.className = state;
-  statusText.textContent = text;
-}
-
-function connect() {
-  let url = urlInput.value.trim();
-  if (!url) return;
-  if (!url.startsWith('ws://') && !url.startsWith('wss://')) url = 'wss://' + url;
-
-  overlayErr.textContent = '';
-  localStorage.setItem('bhid-url', url);
-  setStatus('connecting', 'CONNECTING');
-
-  ws = new WebSocket(url);
-
-  ws.onopen = () => {
-    setStatus('connected', 'CONNECTED');
-    overlay.classList.add('hidden');
-    startCamera();
-    if (serverHasBeep) loadBeepMp3();
-  };
-
-  ws.onmessage = e => {
-    try {
-      const msg = JSON.parse(e.data);
-      if (msg.type === 'ack') {
-        scanCount = msg.count;
-        countEl.textContent = scanCount;
-      } else if (msg.type === 'config') {
-        if (typeof msg.auto_enter === 'boolean') {
-          enterToggle.checked = msg.auto_enter;
-          enterLabel.textContent = msg.auto_enter ? 'ON' : 'OFF';
-        }
-        if (msg.hid_mode) {
-          const real = msg.hid_mode.includes('uinput');
-          hidBadge.textContent    = real ? '⌨ REAL HID' : '⌨ FALLBACK';
-          hidBadge.style.display  = '';
-          hidBadge.style.color    = real ? 'var(--accent)' : 'var(--warn)';
-          hidBadge.style.borderColor = real ? 'var(--accent)' : 'var(--warn)';
-        }
-        if (msg.has_beep) {
-          serverHasBeep = true;
-          loadBeepMp3();
-        }
-      }
-    } catch(e) {}
-  };
-
-  ws.onclose = () => {
-    setStatus('error', 'OFFLINE');
-    stopCamera();
-    setTimeout(() => {
-      overlay.classList.remove('hidden');
-      overlayMsg.textContent = 'Disconnected. Tap Connect to retry.';
-    }, 500);
-  };
-
-  ws.onerror = () => {
-    overlayErr.textContent = 'Connection failed — check the address and try again.';
-    setStatus('error', 'ERROR');
-  };
-}
-
-// ── Camera / ZXing ────────────────────────────────────────────────────────────
-function showCamError(msg) {
-  isScanning = false;
-  setStatus('error', 'CAM ERR');
-  overlayMsg.textContent = msg;
-  overlayErr.textContent = '';
-  overlay.classList.remove('hidden');
-}
-
-async function waitForZXing(ms = 8000) {
-  const t = Date.now();
-  while (Date.now() - t < ms) {
-    if (window.ZXing && window.ZXing.BrowserMultiFormatReader) return true;
-    await new Promise(r => setTimeout(r, 100));
-  }
-  return false;
-}
-
-async function startCamera() {
-  if (isScanning) return;
-  isScanning = true;
-
-  if (!await waitForZXing()) {
-    showCamError('Barcode library failed to load — check internet and reload.'); return;
-  }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showCamError('Camera API unavailable. Needs HTTPS or localhost.'); return;
-  }
-
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
-    });
-  } catch(err) {
-    if (err.name === 'NotAllowedError')
-      showCamError('Camera permission denied. Allow camera access then reload.');
-    else if (err.name === 'NotFoundError')
-      showCamError('No camera found on this device.');
-    else
-      showCamError('Camera error: ' + err.message);
-    return;
-  }
-
-  const video = document.getElementById('video');
-  video.srcObject = stream;
-  await video.play();
-
-  codeReader = new ZXing.BrowserMultiFormatReader();
-  const deviceId = stream.getVideoTracks()[0].getSettings().deviceId;
-
-  // Hand stream control to ZXing
-  stream.getTracks().forEach(t => t.stop());
-  video.srcObject = null;
-
-  try {
-    await codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
-      if (!isScanning) return;
-      if (!result) return;   // NotFoundException between frames is normal
-
-      const value = result.getText();
-      const now   = Date.now();
-      if (value === lastValue && (now - lastScanTs) < DEBOUNCE_MS) return;
-      lastValue  = value;
-      lastScanTs = now;
-      onScan(value);
-    });
-  } catch(err) {
-    showCamError('Camera decode error: ' + (err.message || err));
-  }
-}
-
-function stopCamera() {
-  isScanning = false;
-  if (codeReader) { try { codeReader.reset(); } catch(e) {} codeReader = null; }
-  const v = document.getElementById('video');
-  if (v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()); v.srcObject = null; }
-}
-
-// ── Scan event ────────────────────────────────────────────────────────────────
-function onScan(value) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'scan',
-      value,
-      send_enter: enterToggle.checked,
-    }));
-  }
-
-  // Flash viewfinder
-  flashEl.classList.add('on');
-  setTimeout(() => flashEl.classList.remove('on'), 120);
-
-  // Last-scan badge
-  lastBadge.textContent = value;
-  lastBadge.classList.add('show');
-  clearTimeout(lastBadge._t);
-  lastBadge._t = setTimeout(() => lastBadge.classList.remove('show'), 3000);
-
-  // Beep
-  playBeep();
-
-  // Vibrate
-  if (navigator.vibrate) navigator.vibrate(60);
-
-  // Log
-  addLogItem(value);
-}
-
-function addLogItem(value) {
-  logEmpty.style.display = 'none';
-  const time = new Date().toTimeString().slice(0, 8);
-  const item = document.createElement('div');
-  item.className = 'log-item';
-  item.innerHTML = `
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, user-scalable=no"
+        />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content="#0a0a0f" />
+        <title>BarcodeHID</title>
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            :root {
+                --bg: #0a0a0f;
+                --surface: #12121a;
+                --border: #1e1e2e;
+                --accent: #00e5a0;
+                --accent2: #00b8ff;
+                --warn: #ffa502;
+                --danger: #ff4757;
+                --text: #e8e8f0;
+                --dim: #5a5a7a;
+                --r: 12px;
+                --mono: "Courier New", monospace;
+            }
+
+            html,
+            body {
+                height: 100%;
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--mono);
+                overflow: hidden;
+            }
+
+            /* ── Layout ── */
+            #app {
+                display: flex;
+                flex-direction: column;
+                height: 100dvh;
+                max-width: 480px;
+                margin: 0 auto;
+            }
+
+            /* ── Header ── */
+            #header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px 16px 10px;
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+            }
+
+            #logo {
+                font-size: 13px;
+                font-weight: bold;
+                letter-spacing: 3px;
+                color: var(--accent);
+                text-transform: uppercase;
+            }
+            #logo span {
+                color: var(--dim);
+            }
+
+            #status-pill {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11px;
+                letter-spacing: 1px;
+                padding: 4px 10px;
+                border-radius: 20px;
+                border: 1px solid var(--border);
+                background: var(--surface);
+                transition: all 0.3s;
+            }
+            #status-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--dim);
+                transition: background 0.3s;
+            }
+
+            #status-pill.connected {
+                border-color: var(--accent);
+            }
+            #status-pill.connected #status-dot {
+                background: var(--accent);
+                box-shadow: 0 0 6px var(--accent);
+            }
+            #status-pill.connecting {
+                border-color: var(--warn);
+            }
+            #status-pill.connecting #status-dot {
+                background: var(--warn);
+                animation: blink 1s infinite;
+            }
+            #status-pill.error {
+                border-color: var(--danger);
+            }
+            #status-pill.error #status-dot {
+                background: var(--danger);
+            }
+
+            @keyframes blink {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.2;
+                }
+            }
+
+            /* ── Viewfinder ── */
+            #viewfinder-wrap {
+                position: relative;
+                flex: 0 0 auto;
+                aspect-ratio: 1/1;
+                background: #000;
+                overflow: hidden;
+            }
+            #video {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                display: block;
+            }
+
+            .corner {
+                position: absolute;
+                width: 28px;
+                height: 28px;
+                border-color: var(--accent);
+                border-style: solid;
+                opacity: 0.9;
+            }
+            .corner.tl {
+                top: 20px;
+                left: 20px;
+                border-width: 3px 0 0 3px;
+                border-radius: 4px 0 0 0;
+            }
+            .corner.tr {
+                top: 20px;
+                right: 20px;
+                border-width: 3px 3px 0 0;
+                border-radius: 0 4px 0 0;
+            }
+            .corner.bl {
+                bottom: 20px;
+                left: 20px;
+                border-width: 0 0 3px 3px;
+                border-radius: 0 0 0 4px;
+            }
+            .corner.br {
+                bottom: 20px;
+                right: 20px;
+                border-width: 0 3px 3px 0;
+                border-radius: 0 0 4px 0;
+            }
+
+            #scan-line {
+                position: absolute;
+                left: 20px;
+                right: 20px;
+                height: 2px;
+                background: linear-gradient(
+                    90deg,
+                    transparent,
+                    rgba(0, 229, 160, 0.6),
+                    transparent
+                );
+                box-shadow: 0 0 8px rgba(0, 229, 160, 0.6);
+                animation: scanline 2.4s ease-in-out infinite;
+                pointer-events: none;
+            }
+            @keyframes scanline {
+                0% {
+                    top: 20px;
+                    opacity: 0;
+                }
+                10% {
+                    opacity: 1;
+                }
+                90% {
+                    opacity: 1;
+                }
+                100% {
+                    top: calc(100% - 20px);
+                    opacity: 0;
+                }
+            }
+
+            #flash {
+                position: absolute;
+                inset: 0;
+                background: rgba(0, 229, 160, 0.25);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.05s;
+            }
+            #flash.on {
+                opacity: 1;
+            }
+
+            #last-badge {
+                position: absolute;
+                bottom: 12px;
+                left: 12px;
+                right: 12px;
+                background: rgba(10, 10, 15, 0.85);
+                backdrop-filter: blur(8px);
+                border: 1px solid var(--accent);
+                border-radius: var(--r);
+                padding: 8px 12px;
+                font-size: 13px;
+                letter-spacing: 1px;
+                color: var(--accent);
+                text-align: center;
+                opacity: 0;
+                transform: translateY(4px);
+                transition: all 0.2s;
+                word-break: break-all;
+            }
+            #last-badge.show {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            /* ── Controls ── */
+            #controls {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 16px;
+                border-bottom: 1px solid var(--border);
+                flex-shrink: 0;
+                flex-wrap: wrap;
+            }
+
+            .toggle-label {
+                font-size: 10px;
+                letter-spacing: 2px;
+                color: var(--dim);
+                text-transform: uppercase;
+                flex-shrink: 0;
+            }
+
+            .toggle {
+                position: relative;
+                width: 42px;
+                height: 24px;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+            .toggle input {
+                display: none;
+            }
+            .toggle-track {
+                position: absolute;
+                inset: 0;
+                background: var(--border);
+                border-radius: 12px;
+                transition: background 0.25s;
+            }
+            .toggle input:checked ~ .toggle-track {
+                background: var(--accent);
+            }
+            .toggle-thumb {
+                position: absolute;
+                top: 3px;
+                left: 3px;
+                width: 18px;
+                height: 18px;
+                background: #fff;
+                border-radius: 50%;
+                transition: transform 0.25s;
+                box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+            }
+            .toggle input:checked ~ .toggle-thumb {
+                transform: translateX(18px);
+            }
+
+            .toggle-val {
+                font-size: 11px;
+                letter-spacing: 1px;
+                min-width: 32px;
+            }
+            #enter-label {
+                color: var(--accent);
+            }
+
+            .badge {
+                font-size: 9px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                letter-spacing: 1px;
+                border: 1px solid var(--border);
+                flex-shrink: 0;
+            }
+            #hid-badge {
+                color: var(--dim);
+                background: rgba(0, 229, 160, 0.05);
+                display: none;
+            }
+            #count-badge {
+                margin-left: auto;
+                color: var(--dim);
+                background: none;
+                border: none;
+            }
+            #count-badge span {
+                color: var(--accent);
+            }
+
+            /* ── Log ── */
+            #log-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 16px 6px;
+                flex-shrink: 0;
+            }
+            #log-title {
+                font-size: 10px;
+                letter-spacing: 3px;
+                color: var(--dim);
+                text-transform: uppercase;
+            }
+            #clear-btn {
+                font-size: 10px;
+                letter-spacing: 1px;
+                color: var(--dim);
+                background: none;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 2px 8px;
+                cursor: pointer;
+                font-family: inherit;
+                transition: all 0.2s;
+            }
+            #clear-btn:hover {
+                border-color: var(--danger);
+                color: var(--danger);
+            }
+
+            #log {
+                flex: 1;
+                overflow-y: auto;
+                padding: 0 16px 16px;
+            }
+            #log::-webkit-scrollbar {
+                width: 3px;
+            }
+            #log::-webkit-scrollbar-thumb {
+                background: var(--border);
+                border-radius: 2px;
+            }
+
+            .log-empty {
+                text-align: center;
+                color: var(--dim);
+                font-size: 12px;
+                letter-spacing: 2px;
+                padding-top: 24px;
+            }
+            .log-item {
+                display: flex;
+                align-items: baseline;
+                gap: 10px;
+                padding: 7px 0;
+                border-bottom: 1px solid var(--border);
+                animation: slideIn 0.2s ease-out;
+            }
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(-8px);
+                }
+                to {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            .log-time {
+                font-size: 10px;
+                color: var(--dim);
+                flex-shrink: 0;
+            }
+            .log-value {
+                font-size: 13px;
+                color: var(--text);
+                word-break: break-all;
+                flex: 1;
+            }
+            .log-tag {
+                font-size: 9px;
+                padding: 2px 5px;
+                border-radius: 4px;
+                letter-spacing: 1px;
+                flex-shrink: 0;
+            }
+            .log-tag.enter {
+                background: rgba(0, 229, 160, 0.12);
+                color: var(--accent);
+            }
+            .log-tag.val {
+                background: rgba(0, 184, 255, 0.12);
+                color: var(--accent2);
+            }
+
+            /* ── Overlay ── */
+            #overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(10, 10, 15, 0.96);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 16px;
+                z-index: 100;
+                padding: 32px;
+                text-align: center;
+            }
+            #overlay.hidden {
+                display: none;
+            }
+            #overlay-icon {
+                font-size: 48px;
+            }
+            #overlay-title {
+                font-size: 16px;
+                font-weight: bold;
+                letter-spacing: 3px;
+                text-transform: uppercase;
+                color: var(--accent);
+            }
+            #overlay-msg {
+                font-size: 13px;
+                color: var(--dim);
+                line-height: 1.7;
+                letter-spacing: 0.5px;
+                max-width: 300px;
+            }
+            #overlay-err {
+                font-size: 11px;
+                color: var(--danger);
+                letter-spacing: 1px;
+                max-width: 300px;
+                min-height: 16px;
+            }
+
+            #url-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                width: 100%;
+                max-width: 300px;
+            }
+            #url-label {
+                font-size: 10px;
+                letter-spacing: 2px;
+                color: var(--dim);
+                text-align: left;
+            }
+            #url-input {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: var(--r);
+                color: var(--text);
+                font-family: var(--mono);
+                font-size: 14px;
+                padding: 10px 14px;
+                width: 100%;
+                outline: none;
+                letter-spacing: 0.5px;
+                transition: border-color 0.2s;
+            }
+            #url-input:focus {
+                border-color: var(--accent);
+            }
+
+            #connect-btn {
+                background: var(--accent);
+                color: #0a0a0f;
+                border: none;
+                border-radius: var(--r);
+                font-family: var(--mono);
+                font-size: 13px;
+                font-weight: bold;
+                letter-spacing: 3px;
+                text-transform: uppercase;
+                padding: 12px 24px;
+                cursor: pointer;
+                width: 100%;
+                max-width: 300px;
+                transition:
+                    opacity 0.2s,
+                    transform 0.1s;
+            }
+            #connect-btn:active {
+                transform: scale(0.97);
+                opacity: 0.85;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <div id="header">
+                <div id="logo">Barcode<span>HID</span></div>
+                <div id="status-pill">
+                    <div id="status-dot"></div>
+                    <span id="status-text">OFFLINE</span>
+                </div>
+            </div>
+
+            <div id="viewfinder-wrap">
+                <video id="video" autoplay muted playsinline></video>
+                <div class="corner tl"></div>
+                <div class="corner tr"></div>
+                <div class="corner bl"></div>
+                <div class="corner br"></div>
+                <div id="scan-line"></div>
+                <div id="flash"></div>
+                <div id="last-badge"></div>
+            </div>
+
+            <div id="controls">
+                <span class="toggle-label">Enter</span>
+                <label class="toggle">
+                    <input type="checkbox" id="enter-toggle" checked />
+                    <div class="toggle-track"></div>
+                    <div class="toggle-thumb"></div>
+                </label>
+                <span class="toggle-val" id="enter-label">ON</span>
+
+                <span class="toggle-label" style="margin-left: 8px">Beep</span>
+                <label class="toggle">
+                    <input type="checkbox" id="beep-toggle" checked />
+                    <div class="toggle-track"></div>
+                    <div class="toggle-thumb"></div>
+                </label>
+
+                <div class="badge" id="hid-badge">HID</div>
+                <div class="badge" id="count-badge">
+                    SCANS: <span id="scan-count">0</span>
+                </div>
+            </div>
+
+            <div id="log-header">
+                <span id="log-title">Scan History</span>
+                <button id="clear-btn" onclick="clearLog()">CLEAR</button>
+            </div>
+            <div id="log">
+                <div class="log-empty" id="log-empty">— awaiting scans —</div>
+            </div>
+        </div>
+
+        <!-- Connection overlay -->
+        <div id="overlay">
+            <div id="overlay-icon">📡</div>
+            <div id="overlay-title">Connect to PC</div>
+            <div id="overlay-msg">
+                Enter the WebSocket address shown in your terminal, or scan the
+                QR code.
+            </div>
+            <div id="overlay-err"></div>
+            <div id="url-wrap">
+                <div id="url-label">SERVER ADDRESS</div>
+                <input
+                    id="url-input"
+                    type="text"
+                    placeholder="wss://192.168.1.x:8765"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                />
+            </div>
+            <button id="connect-btn" onclick="connect()">CONNECT</button>
+        </div>
+
+        <script>
+            // ── ZXing loader with CDN fallback ────────────────────────────────────────────
+            (function () {
+                const cdns = [
+                    "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.1/umd/index.min.js",
+                    "https://unpkg.com/@zxing/library@0.21.1/umd/index.min.js",
+                ];
+                let idx = 0;
+                function tryLoad() {
+                    if (idx >= cdns.length) {
+                        document.getElementById("overlay-err").textContent =
+                            "❌ Failed to load barcode library. Check internet and reload.";
+                        return;
+                    }
+                    const s = document.createElement("script");
+                    s.src = cdns[idx++];
+                    s.onload = () => {
+                        if (window.ZXingLib) window.ZXing = window.ZXingLib;
+                        if (
+                            !window.ZXing ||
+                            !window.ZXing.BrowserMultiFormatReader
+                        ) {
+                            tryLoad();
+                            return;
+                        }
+                    };
+                    s.onerror = () => tryLoad();
+                    document.head.appendChild(s);
+                }
+                tryLoad();
+            })();
+
+            // ── State ─────────────────────────────────────────────────────────────────────
+            let ws = null;
+            let scanCount = 0;
+            let isScanning = false;
+            let codeReader = null;
+            let lastValue = null;
+            let lastScanTs = 0;
+            let audioCtx = null;
+            let beepBuffer = null; // decoded AudioBuffer if mp3 was embedded
+            let serverHasBeep = false;
+            const DEBOUNCE_MS = 2000;
+
+            // ── UI refs ───────────────────────────────────────────────────────────────────
+            const pill = document.getElementById("status-pill");
+            const dot = document.getElementById("status-dot");
+            const statusText = document.getElementById("status-text");
+            const overlay = document.getElementById("overlay");
+            const overlayMsg = document.getElementById("overlay-msg");
+            const overlayErr = document.getElementById("overlay-err");
+            const urlInput = document.getElementById("url-input");
+            const enterToggle = document.getElementById("enter-toggle");
+            const enterLabel = document.getElementById("enter-label");
+            const beepToggle = document.getElementById("beep-toggle");
+            const countEl = document.getElementById("scan-count");
+            const lastBadge = document.getElementById("last-badge");
+            const flashEl = document.getElementById("flash");
+            const logEl = document.getElementById("log");
+            const logEmpty = document.getElementById("log-empty");
+            const hidBadge = document.getElementById("hid-badge");
+
+            // ── Persist / restore URL ─────────────────────────────────────────────────────
+            function deriveWSUrl() {
+                const l = window.location;
+                if (!l.hostname) return null;
+                const scheme = l.protocol === "https:" ? "wss:" : "ws:";
+                const port = l.port || (scheme === "wss:" ? "443" : "80");
+                return `${scheme}//${l.hostname}:${port}`;
+            }
+
+            const derived = deriveWSUrl();
+            const saved = (localStorage.getItem("bhid-url") || "").replace(
+                /^ws:\/\//,
+                "wss://",
+            );
+            const initUrl = derived || saved || "";
+            if (initUrl) urlInput.value = initUrl;
+
+            enterToggle.addEventListener("change", () => {
+                enterLabel.textContent = enterToggle.checked ? "ON" : "OFF";
+            });
+
+            // ── Audio ─────────────────────────────────────────────────────────────────────
+            function getAudioCtx() {
+                if (!audioCtx)
+                    audioCtx = new (
+                        window.AudioContext || window.webkitAudioContext
+                    )();
+                return audioCtx;
+            }
+
+            // Synthesize a short scanner beep via Web Audio (fallback when no mp3)
+            function synthBeep() {
+                try {
+                    const ctx = getAudioCtx();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = "square";
+                    osc.frequency.value = 1800;
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(
+                        0.001,
+                        ctx.currentTime + 0.08,
+                    );
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.08);
+                } catch (e) {}
+            }
+
+            async function loadBeepMp3() {
+                try {
+                    const res = await fetch("/beep.mp3");
+                    if (!res.ok) return;
+                    const buf = await res.arrayBuffer();
+                    beepBuffer = await getAudioCtx().decodeAudioData(buf);
+                } catch (e) {
+                    beepBuffer = null;
+                }
+            }
+
+            function playBeep() {
+                if (!beepToggle.checked) return;
+                if (beepBuffer) {
+                    try {
+                        const ctx = getAudioCtx();
+                        const src = ctx.createBufferSource();
+                        src.buffer = beepBuffer;
+                        src.connect(ctx.destination);
+                        src.start();
+                    } catch (e) {
+                        synthBeep();
+                    }
+                } else {
+                    synthBeep();
+                }
+            }
+
+            // ── WebSocket ─────────────────────────────────────────────────────────────────
+            function setStatus(state, text) {
+                pill.className = state;
+                statusText.textContent = text;
+            }
+
+            function connect() {
+                let url = urlInput.value.trim();
+                if (!url) return;
+                if (!url.startsWith("ws://") && !url.startsWith("wss://"))
+                    url = "wss://" + url;
+
+                overlayErr.textContent = "";
+                localStorage.setItem("bhid-url", url);
+                setStatus("connecting", "CONNECTING");
+
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    setStatus("connected", "CONNECTED");
+                    overlay.classList.add("hidden");
+                    startCamera();
+                    if (serverHasBeep) loadBeepMp3();
+                };
+
+                ws.onmessage = (e) => {
+                    try {
+                        const msg = JSON.parse(e.data);
+                        if (msg.type === "ack") {
+                            scanCount = msg.count;
+                            countEl.textContent = scanCount;
+                        } else if (msg.type === "config") {
+                            if (typeof msg.auto_enter === "boolean") {
+                                enterToggle.checked = msg.auto_enter;
+                                enterLabel.textContent = msg.auto_enter
+                                    ? "ON"
+                                    : "OFF";
+                            }
+                            if (msg.hid_mode) {
+                                const real = msg.hid_mode.includes("uinput");
+                                hidBadge.textContent = real
+                                    ? "⌨ REAL HID"
+                                    : "⌨ FALLBACK";
+                                hidBadge.style.display = "";
+                                hidBadge.style.color = real
+                                    ? "var(--accent)"
+                                    : "var(--warn)";
+                                hidBadge.style.borderColor = real
+                                    ? "var(--accent)"
+                                    : "var(--warn)";
+                            }
+                            if (msg.has_beep) {
+                                serverHasBeep = true;
+                                loadBeepMp3();
+                            }
+                        }
+                    } catch (e) {}
+                };
+
+                ws.onclose = () => {
+                    setStatus("error", "OFFLINE");
+                    stopCamera();
+                    setTimeout(() => {
+                        overlay.classList.remove("hidden");
+                        overlayMsg.textContent =
+                            "Disconnected. Tap Connect to retry.";
+                    }, 500);
+                };
+
+                ws.onerror = () => {
+                    overlayErr.textContent =
+                        "Connection failed — check the address and try again.";
+                    setStatus("error", "ERROR");
+                };
+            }
+
+            // ── Camera / ZXing ────────────────────────────────────────────────────────────
+            function showCamError(msg) {
+                isScanning = false;
+                setStatus("error", "CAM ERR");
+                overlayMsg.textContent = msg;
+                overlayErr.textContent = "";
+                overlay.classList.remove("hidden");
+            }
+
+            async function waitForZXing(ms = 8000) {
+                const t = Date.now();
+                while (Date.now() - t < ms) {
+                    if (window.ZXing && window.ZXing.BrowserMultiFormatReader)
+                        return true;
+                    await new Promise((r) => setTimeout(r, 100));
+                }
+                return false;
+            }
+
+            // isIOS: true on any iOS device regardless of browser, since all iOS browsers
+            // are WebKit. Used to apply iOS-specific camera workarounds.
+            const isIOS =
+                /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" &&
+                    navigator.maxTouchPoints > 1);
+
+            // pickRearCamera: iOS WebKit sometimes returns undefined from getSettings().deviceId
+            // and doesn't reliably honour facingMode constraints alone. We enumerate devices
+            // explicitly and pick the last back-facing one (physically the widest/main lens).
+            // On Android and desktop, undefined deviceId is fine — ZXing picks its own default.
+            async function pickRearCamera() {
+                try {
+                    const devices =
+                        await navigator.mediaDevices.enumerateDevices();
+                    const cameras = devices.filter(
+                        (d) => d.kind === "videoinput",
+                    );
+
+                    if (cameras.length === 0) return undefined;
+
+                    // iOS labels cameras like "Back Camera", "Back Dual Camera", etc.
+                    // Android labels vary: "camera2 0, facing back", "Back camera", etc.
+                    // We prefer the last entry whose label hints at rear/environment facing,
+                    // falling back to the last camera in the list if none match.
+                    const rearCameras = cameras.filter((d) =>
+                        /back|rear|environment|posterior/i.test(d.label),
+                    );
+
+                    const chosen =
+                        rearCameras.length > 0
+                            ? rearCameras[rearCameras.length - 1] // last = highest-res on iOS
+                            : cameras[cameras.length - 1]; // fallback: last in list
+
+                    return chosen.deviceId || undefined;
+                } catch (e) {
+                    return undefined;
+                }
+            }
+
+            async function startCamera() {
+                if (isScanning) return;
+                isScanning = true;
+
+                if (!(await waitForZXing())) {
+                    showCamError(
+                        "Barcode library failed to load — check internet and reload.",
+                    );
+                    return;
+                }
+                if (
+                    !navigator.mediaDevices ||
+                    !navigator.mediaDevices.getUserMedia
+                ) {
+                    showCamError(
+                        "Camera API unavailable. Needs HTTPS or localhost.",
+                    );
+                    return;
+                }
+
+                // ── Step 1: request camera permission ─────────────────────────────────────
+                // We do an initial getUserMedia call for two reasons:
+                //   a) Trigger the permission prompt before enumerating devices
+                //      (enumerateDevices returns empty labels until permission is granted)
+                //   b) Verify the camera actually works before handing off to ZXing
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: { ideal: "environment" },
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                        },
+                    });
+                } catch (err) {
+                    if (err.name === "NotAllowedError")
+                        showCamError(
+                            "Camera permission denied. Allow camera access then reload.",
+                        );
+                    else if (err.name === "NotFoundError")
+                        showCamError("No camera found on this device.");
+                    else showCamError("Camera error: " + err.message);
+                    return;
+                }
+
+                // Stop the probe stream — we'll let ZXing open the camera properly below
+                stream.getTracks().forEach((t) => t.stop());
+
+                // ── Step 2: pick the best rear camera by explicit enumeration ─────────────
+                // Now that permission is granted, enumerateDevices returns real labels.
+                // This is the iOS fix: instead of relying on getSettings().deviceId
+                // (which can be undefined on iOS WebKit), we pick the device ourselves.
+                const deviceId = await pickRearCamera();
+
+                const video = document.getElementById("video");
+                codeReader = new ZXing.BrowserMultiFormatReader();
+
+                // ── Step 3: start ZXing decode loop ───────────────────────────────────────
+                // Pass the explicit deviceId (or undefined to let ZXing decide).
+                // ZXing opens its own stream using this deviceId with its own constraints.
+                try {
+                    await codeReader.decodeFromVideoDevice(
+                        deviceId,
+                        video,
+                        (result, err) => {
+                            if (!isScanning) return;
+                            if (!result) return; // NotFoundException between frames is normal
+
+                            const value = result.getText();
+                            const now = Date.now();
+                            if (
+                                value === lastValue &&
+                                now - lastScanTs < DEBOUNCE_MS
+                            )
+                                return;
+                            lastValue = value;
+                            lastScanTs = now;
+                            onScan(value);
+                        },
+                    );
+                } catch (err) {
+                    showCamError(
+                        "Camera decode error: " + (err.message || err),
+                    );
+                }
+            }
+
+            function stopCamera() {
+                isScanning = false;
+                if (codeReader) {
+                    try {
+                        codeReader.reset();
+                    } catch (e) {}
+                    codeReader = null;
+                }
+                const v = document.getElementById("video");
+                if (v.srcObject) {
+                    v.srcObject.getTracks().forEach((t) => t.stop());
+                    v.srcObject = null;
+                }
+            }
+
+            // ── Scan event ────────────────────────────────────────────────────────────────
+            function onScan(value) {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(
+                        JSON.stringify({
+                            type: "scan",
+                            value,
+                            send_enter: enterToggle.checked,
+                        }),
+                    );
+                }
+
+                // Flash viewfinder
+                flashEl.classList.add("on");
+                setTimeout(() => flashEl.classList.remove("on"), 120);
+
+                // Last-scan badge
+                lastBadge.textContent = value;
+                lastBadge.classList.add("show");
+                clearTimeout(lastBadge._t);
+                lastBadge._t = setTimeout(
+                    () => lastBadge.classList.remove("show"),
+                    3000,
+                );
+
+                // Beep
+                playBeep();
+
+                // Vibrate
+                if (navigator.vibrate) navigator.vibrate(60);
+
+                // Log
+                addLogItem(value);
+            }
+
+            function addLogItem(value) {
+                logEmpty.style.display = "none";
+                const time = new Date().toTimeString().slice(0, 8);
+                const item = document.createElement("div");
+                item.className = "log-item";
+                item.innerHTML = `
     <span class="log-time">${time}</span>
     <span class="log-value">${esc(value)}</span>
-    <span class="log-tag ${enterToggle.checked ? 'enter' : 'val'}">
-      ${enterToggle.checked ? '↵' : 'VAL'}
+    <span class="log-tag ${enterToggle.checked ? "enter" : "val"}">
+      ${enterToggle.checked ? "↵" : "VAL"}
     </span>`;
-  logEl.insertBefore(item, logEl.firstChild);
-  const items = logEl.querySelectorAll('.log-item');
-  if (items.length > 50) items[items.length - 1].remove();
-}
+                logEl.insertBefore(item, logEl.firstChild);
+                const items = logEl.querySelectorAll(".log-item");
+                if (items.length > 50) items[items.length - 1].remove();
+            }
 
-function clearLog() {
-  logEl.querySelectorAll('.log-item').forEach(e => e.remove());
-  logEmpty.style.display = '';
-}
+            function clearLog() {
+                logEl.querySelectorAll(".log-item").forEach((e) => e.remove());
+                logEmpty.style.display = "";
+            }
 
-function esc(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+            function esc(s) {
+                return s
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+            }
 
-// ── Auto-connect if opened via QR ────────────────────────────────────────────
-if (derived) {
-  overlayMsg.textContent = 'Server found — connecting…';
-  setTimeout(connect, 400);
-} else if (saved) {
-  overlayMsg.textContent = 'Saved server found. Tap Connect to reconnect.';
-}
-</script>
-</body>
+            // ── Auto-connect if opened via QR ────────────────────────────────────────────
+            if (derived) {
+                overlayMsg.textContent = "Server found — connecting…";
+                setTimeout(connect, 400);
+            } else if (saved) {
+                overlayMsg.textContent =
+                    "Saved server found. Tap Connect to reconnect.";
+            }
+        </script>
+    </body>
 </html>
