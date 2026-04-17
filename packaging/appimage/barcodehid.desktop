@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BarcodeHID
+Comment=Barcode scanner — scan with phone, type on PC
+Exec=barcodehid
+Icon=barcodehid
+Terminal=true
+Categories=Utility;
+StartupNotify=false
