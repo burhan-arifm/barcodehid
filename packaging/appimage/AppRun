@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# AppRun — entry point for BarcodeHID AppImage
+# APPDIR is set automatically by the AppImage runtime to the mount point.
+exec "$APPDIR/usr/bin/barcodehid" "$@"

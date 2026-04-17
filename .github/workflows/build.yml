@@ -1,0 +1,147 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore: ["**.md", ".gitignore"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (AppImage)
+            runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cgo: "0"
+            out: barcodehid
+            appimage: true
+
+          - name: Windows
+            runner: windows-latest
+            goos: windows
+            goarch: amd64
+            cgo: "0"
+            out: barcodehid.exe
+            appimage: false
+
+          - name: macOS Intel
+            runner: macos-13
+            goos: darwin
+            goarch: amd64
+            cgo: "1"
+            out: barcodehid-macos-amd64
+            appimage: false
+
+          - name: macOS Apple Silicon
+            runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            cgo: "1"
+            out: barcodehid-macos-arm64
+            appimage: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      # ── Resolve build tags (add beep if asset exists) ──────────────────────
+      - name: Resolve build tags (Unix)
+        if: runner.os != 'Windows'
+        id: tags_unix
+        run: |
+          TAGS=""
+          [ -f assets/beep.mp3 ] && TAGS="beep"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve build tags (Windows)
+        if: runner.os == 'Windows'
+        id: tags_win
+        shell: pwsh
+        run: |
+          $tags = ""
+          if (Test-Path "assets/beep.mp3") { $tags = "beep" }
+          echo "tags=$tags" >> $env:GITHUB_OUTPUT
+
+      # ── Build binary ───────────────────────────────────────────────────────
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          TAGS="${{ steps.tags_unix.outputs.tags }}"
+          TAG_ARG=""
+          [ -n "$TAGS" ] && TAG_ARG="-tags $TAGS"
+
+          go build \
+            $TAG_ARG \
+            -ldflags="-s -w -X main.buildVariant=portable" \
+            -trimpath \
+            -o ${{ matrix.out }} \
+            .
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        shell: pwsh
+        run: |
+          $tags = "${{ steps.tags_win.outputs.tags }}"
+          $tagArg = if ($tags) { "-tags $tags" } else { "" }
+
+          Invoke-Expression "go build $tagArg -ldflags=`"-s -w -X main.buildVariant=portable`" -trimpath -o ${{ matrix.out }} ."
+
+      # ── AppImage (Linux only) ──────────────────────────────────────────────
+      - name: Build AppImage
+        if: matrix.appimage == true
+        run: |
+          # Download appimagetool
+          curl -fsSL -o appimagetool \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+
+          # Build AppDir
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
+
+          cp ${{ matrix.out }}                              AppDir/usr/bin/barcodehid
+          cp packaging/appimage/AppRun                     AppDir/AppRun
+          cp packaging/appimage/barcodehid.desktop         AppDir/barcodehid.desktop
+          cp packaging/appimage/barcodehid.svg             AppDir/barcodehid.svg
+          cp packaging/appimage/barcodehid.svg             AppDir/usr/share/icons/hicolor/scalable/apps/barcodehid.svg
+          chmod +x AppDir/usr/bin/barcodehid AppDir/AppRun
+
+          ARCH=x86_64 ./appimagetool AppDir barcodehid-linux-x86_64.AppImage
+          chmod +x barcodehid-linux-x86_64.AppImage
+
+      # ── Upload artifacts ───────────────────────────────────────────────────
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}
+          retention-days: 7
+
+      - name: Upload AppImage
+        if: matrix.appimage == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: barcodehid-linux-x86_64.AppImage
+          path: barcodehid-linux-x86_64.AppImage
+          retention-days: 7

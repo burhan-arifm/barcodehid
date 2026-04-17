@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (AppImage)
+            runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            cgo: "0"
+            out: barcodehid
+            appimage: true
+            artifact: barcodehid-linux-x86_64.AppImage
+
+          - name: Windows
+            runner: windows-latest
+            goos: windows
+            goarch: amd64
+            cgo: "0"
+            out: barcodehid-windows-amd64.exe
+            appimage: false
+            artifact: barcodehid-windows-amd64.exe
+
+          - name: macOS Intel
+            runner: macos-13
+            goos: darwin
+            goarch: amd64
+            cgo: "1"
+            out: barcodehid-macos-amd64
+            appimage: false
+            artifact: barcodehid-macos-amd64
+
+          - name: macOS Apple Silicon
+            runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            cgo: "1"
+            out: barcodehid-macos-arm64
+            appimage: false
+            artifact: barcodehid-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Resolve tags (Unix)
+        if: runner.os != 'Windows'
+        id: tags_unix
+        run: |
+          TAGS=""
+          [ -f assets/beep.mp3 ] && TAGS="beep"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve tags (Windows)
+        if: runner.os == 'Windows'
+        id: tags_win
+        shell: pwsh
+        run: |
+          $tags = ""
+          if (Test-Path "assets/beep.mp3") { $tags = "beep" }
+          echo "tags=$tags" >> $env:GITHUB_OUTPUT
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          TAGS="${{ steps.tags_unix.outputs.tags }}"
+          TAG_ARG=""
+          [ -n "$TAGS" ] && TAG_ARG="-tags $TAGS"
+          go build $TAG_ARG \
+            -ldflags="-s -w -X main.buildVariant=portable" \
+            -trimpath -o ${{ matrix.out }} .
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        shell: pwsh
+        run: |
+          $tags = "${{ steps.tags_win.outputs.tags }}"
+          $tagArg = if ($tags) { "-tags $tags" } else { "" }
+          Invoke-Expression "go build $tagArg -ldflags=`"-s -w -X main.buildVariant=portable`" -trimpath -o ${{ matrix.out }} ."
+
+      - name: Build AppImage
+        if: matrix.appimage == true
+        run: |
+          curl -fsSL -o appimagetool \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
+
+          cp ${{ matrix.out }}                              AppDir/usr/bin/barcodehid
+          cp packaging/appimage/AppRun                     AppDir/AppRun
+          cp packaging/appimage/barcodehid.desktop         AppDir/barcodehid.desktop
+          cp packaging/appimage/barcodehid.svg             AppDir/barcodehid.svg
+          cp packaging/appimage/barcodehid.svg             AppDir/usr/share/icons/hicolor/scalable/apps/barcodehid.svg
+          chmod +x AppDir/usr/bin/barcodehid AppDir/AppRun
+
+          ARCH=x86_64 ./appimagetool AppDir barcodehid-linux-x86_64.AppImage
+          chmod +x barcodehid-linux-x86_64.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          retention-days: 1
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "BarcodeHID ${{ github.ref_name }}"
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: dist/*
+          body: |
+            ## BarcodeHID ${{ github.ref_name }}
+
+            Scan barcodes with your Android phone → keyboard input on your PC.
+            Single-file distribution. No drivers. No installation.
+
+            ### Downloads
+
+            | File | Platform | Notes |
+            |---|---|---|
+            | `barcodehid-linux-x86_64.AppImage` | Linux x64 | Recommended — runs on any distro |
+            | `barcodehid-windows-amd64.exe` | Windows x64 | No setup needed |
+            | `barcodehid-macos-amd64` | macOS Intel | Needs Accessibility permission |
+            | `barcodehid-macos-arm64` | macOS Apple Silicon | Needs Accessibility permission |
+
+            ### Quick start
+            See [README.md](README.md) for full setup and usage instructions.
+
+            ### Linux — upgrade HID quality (optional)
+            The AppImage works out of the box. For real kernel-level HID (works
+            in terminals and games too), run `setup.sh` and re-login:
+            ```bash
+            bash setup.sh
+            # log out and back in
+            ./barcodehid-linux-x86_64.AppImage
+            ```
