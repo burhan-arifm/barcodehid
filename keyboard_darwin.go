@@ -14,9 +14,10 @@ package main
 // The binary will detect missing permission and print a clear guided message.
 
 /*
-#cgo LDFLAGS: -framework CoreGraphics -framework CoreFoundation
+#cgo LDFLAGS: -framework CoreGraphics -framework CoreFoundation -framework ApplicationServices
 
 #include <CoreGraphics/CoreGraphics.h>
+#include <ApplicationServices/ApplicationServices.h>
 #include <stdlib.h>
 
 // post_key sends a single key event (down or up) with optional shift modifier.
@@ -33,10 +34,8 @@ void post_key(CGKeyCode keyCode, bool keyDown, bool shift) {
 }
 
 // check_accessibility returns 1 if the process has Accessibility permission.
+// AXIsProcessTrusted() is declared in ApplicationServices/ApplicationServices.h.
 int check_accessibility() {
-    // AXIsProcessTrustedWithOptions prompts the user if not already trusted.
-    // We pass NULL to just check without prompting here — we'll print our own
-    // message below.
     return AXIsProcessTrusted() ? 1 : 0;
 }
 */
