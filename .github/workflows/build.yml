@@ -36,8 +36,13 @@ jobs:
             out: barcodehid.exe
             appimage: false
 
-          - name: macOS Intel
-            runner: macos-13
+          # Cross-compile Intel from ARM runner — avoids macos-13 queue wait.
+          # CGo is required for keyboard_darwin.go (Core Graphics).
+          # We use the native arm64 runner but target amd64 via GOARCH.
+          # Note: CGo cross-compilation on macOS works because Apple ships
+          # a universal SDK — the same clang can target both amd64 and arm64.
+          - name: macOS Intel (cross from ARM)
+            runner: macos-latest
             goos: darwin
             goarch: amd64
             cgo: "1"
@@ -53,9 +58,9 @@ jobs:
             appimage: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.22"
           cache: true
@@ -108,12 +113,16 @@ jobs:
       - name: Build AppImage
         if: matrix.appimage == true
         run: |
+          # Install FUSE — required to run appimagetool (which is itself an AppImage)
+          sudo apt-get update -qq
+          sudo apt-get install -y libfuse2
+
           # Download appimagetool
           curl -fsSL -o appimagetool \
             "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
 
-          # Build AppDir — mkdir first to avoid cp errors
+          # Build AppDir
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
 
@@ -129,7 +138,7 @@ jobs:
 
       # ── Upload artifacts ───────────────────────────────────────────────────
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.out }}
           path: ${{ matrix.out }}
@@ -137,7 +146,7 @@ jobs:
 
       - name: Upload AppImage
         if: matrix.appimage == true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: barcodehid-linux-x86_64.AppImage
           path: barcodehid-linux-x86_64.AppImage

@@ -37,8 +37,8 @@ jobs:
             appimage: false
             artifact: barcodehid-windows-amd64.exe
 
-          - name: macOS Intel
-            runner: macos-13
+          - name: macOS Intel (cross from ARM)
+            runner: macos-latest
             goos: darwin
             goarch: amd64
             cgo: "1"
@@ -56,9 +56,9 @@ jobs:
             artifact: barcodehid-macos-arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.22"
           cache: true
@@ -108,6 +108,9 @@ jobs:
       - name: Build AppImage
         if: matrix.appimage == true
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libfuse2
+
           curl -fsSL -o appimagetool \
             "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
@@ -126,7 +129,7 @@ jobs:
           chmod +x barcodehid-linux-x86_64.AppImage
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
@@ -138,7 +141,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
