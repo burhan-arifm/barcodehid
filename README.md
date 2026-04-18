@@ -253,54 +253,6 @@ chmod +x barcodehid-linux-x86_64.AppImage
 
 ---
 
-## Publishing a release
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-GitHub Actions builds all 4 binaries and publishes them to a GitHub Release automatically.
-
----
-
-## Project structure
-
-```
-barcodehid/
-├── .github/
-│   └── workflows/
-│       ├── build.yml             CI: build on every push/PR
-│       └── release.yml           CD: build + publish on git tag
-├── assets/
-│   ├── scanner.html              phone UI (embedded at build time)
-│   └── beep.mp3                  optional custom beep (gitignored)
-├── packaging/
-│   └── appimage/
-│       ├── AppRun                AppImage entry point
-│       ├── barcodehid.desktop    desktop integration metadata
-│       └── barcodehid.svg        app icon
-├── keyboard_common.go            Keyboard interface + US QWERTY table
-├── keyboard_linux.go             uinput → dotool → ydotool → wtype → xdotool
-├── keyboard_windows.go           SendInput Win32 API
-├── keyboard_darwin.go            CGEvent Core Graphics (CGo)
-├── main.go                       entry point + flags
-├── server.go                     HTTPS + WebSocket + QR + scan log
-├── cert.go                       self-signed TLS (generated at runtime)
-├── log.go                        logging + ANSI colours
-├── embed.go                      go:embed declarations
-├── embed_beep.go                 compiled with -tags beep
-├── embed_beep_stub.go            compiled without beep (nil stub)
-├── go.mod
-├── go.sum
-├── build.sh                      local build + AppImage packaging
-├── setup.sh                      Linux uinput permission setup
-├── .gitignore
-└── README.md
-```
-
----
-
 ## Troubleshooting
 
 **Camera doesn't open on phone**
