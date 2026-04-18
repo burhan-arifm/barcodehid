@@ -68,6 +68,10 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(embeddedHTML)
 
+	case "/qr":
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(embeddedQRHTML)
+
 	case "/beep.mp3":
 		if len(embeddedBeep) > 0 {
 			w.Header().Set("Content-Type", "audio/mpeg")
@@ -92,6 +96,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	addr := conn.RemoteAddr().String()
 	logf("📱  Phone connected from %s", addr)
+	gTray.connected.Store(true)
 
 	// Tell phone about server config so UI can sync
 	_ = conn.WriteJSON(wsOut{
@@ -158,6 +163,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	gTray.connected.Store(false)
 	logf("📵  Phone disconnected (%s)", addr)
 }
 
@@ -206,7 +212,7 @@ func printQR(url string) {
 		printWarn("QR generation failed: " + err.Error())
 		return
 	}
-	bmp  := q.Bitmap()
+	bmp := q.Bitmap()
 	rows := len(bmp)
 	if rows == 0 {
 		return
@@ -253,18 +259,18 @@ func printBanner(ip string, port int) {
 	}
 
 	title := fmt.Sprintf("BarcodeHID  (%s)", variant)
-	pad   := (W - len(title)) / 2
+	pad := (W - len(title)) / 2
 
 	fmt.Println()
 	fmt.Println("╔" + strings.Repeat("═", W) + "╗")
 	fmt.Println("║" + strings.Repeat(" ", pad) + title +
 		strings.Repeat(" ", W-pad-len(title)) + "║")
 	fmt.Println("╠" + strings.Repeat("═", W) + "╣")
-	fmt.Println(row("Scanner",    fmt.Sprintf("https://%s:%d", ip, port)))
-	fmt.Println(row("WebSocket",  fmt.Sprintf("wss://%s:%d", ip, port)))
-	fmt.Println(row("HID",        gHIDMode))
+	fmt.Println(row("Scanner", fmt.Sprintf("https://%s:%d", ip, port)))
+	fmt.Println(row("WebSocket", fmt.Sprintf("wss://%s:%d", ip, port)))
+	fmt.Println(row("HID", gHIDMode))
 	fmt.Println(row("Auto-Enter", map[bool]string{true: "ON", false: "OFF"}[gAutoEnter]))
-	fmt.Println(row("Beep",       beepStatus))
+	fmt.Println(row("Beep", beepStatus))
 	fmt.Println("╠" + strings.Repeat("─", W) + "╣")
 	fmt.Println("║" + fmt.Sprintf("%-*s", W,
 		"  Scan QR below with phone camera") + "║")
@@ -288,7 +294,7 @@ func startServer(dir string, port int, host string) error {
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	ip   := getLANIP()
+	ip := getLANIP()
 	bind := fmt.Sprintf("%s:%d", host, port)
 
 	mux := http.NewServeMux()
