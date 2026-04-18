@@ -44,7 +44,7 @@ jobs:
             cgo: "1"
             out: barcodehid-macos-amd64
             appimage: false
-            artifact: barcodehid-macos-amd64
+            artifact: BarcodeHID-macos-amd64.app.zip
 
           - name: macOS Apple Silicon
             runner: macos-latest
@@ -53,7 +53,7 @@ jobs:
             cgo: "1"
             out: barcodehid-macos-arm64
             appimage: false
-            artifact: barcodehid-macos-arm64
+            artifact: BarcodeHID-macos-arm64.app.zip
 
     steps:
       - uses: actions/checkout@v6
@@ -63,6 +63,21 @@ jobs:
           go-version: "1.22"
           cache: true
 
+      # ── Platform build dependencies ────────────────────────────────────────
+      - name: Install Linux build dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            libglib2.0-dev
+
+      - name: Install Windows icon tool (goversioninfo)
+        if: matrix.goos == 'windows'
+        run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+
+      # ── Resolve build tags ─────────────────────────────────────────────────
       - name: Resolve build tags (Unix)
         if: runner.os != 'Windows'
         id: tags_unix
@@ -80,6 +95,18 @@ jobs:
           if (Test-Path "assets/beep.mp3") { $tagArg = "-tags beep" }
           "tags=$tagArg" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      # ── Embed Windows icon ─────────────────────────────────────────────────
+      - name: Embed Windows icon
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          $env:GOPATH = "$env:USERPROFILE\go"
+          $tool = "$env:GOPATH\bin\goversioninfo.exe"
+          & $tool -icon packaging/windows/barcodehid.ico `
+                  -o resource.syso `
+                  packaging/windows/versioninfo.json
+
+      # ── Build binary ───────────────────────────────────────────────────────
       - name: Build (Unix)
         if: runner.os != 'Windows'
         env:
@@ -105,12 +132,20 @@ jobs:
           $tagArg = "${{ steps.tags_win.outputs.tags }}"
           Invoke-Expression "go build $tagArg -ldflags=`"-s -w -X main.buildVariant=portable`" -trimpath -o ${{ matrix.out }} ."
 
+      # ── macOS .app bundle ──────────────────────────────────────────────────
+      - name: Build macOS .app bundle
+        if: matrix.goos == 'darwin'
+        run: |
+          mkdir -p dist
+          chmod +x packaging/macos/make-app-bundle.sh
+          bash packaging/macos/make-app-bundle.sh \
+            ${{ matrix.out }} dist/
+
+      # ── Linux AppImage ─────────────────────────────────────────────────────
       - name: Build AppImage
         if: matrix.appimage == true
         run: |
-          sudo apt-get update -qq
           sudo apt-get install -y libfuse2
-
           curl -fsSL -o appimagetool \
             "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
@@ -128,6 +163,7 @@ jobs:
           ARCH=x86_64 ./appimagetool AppDir barcodehid-linux-x86_64.AppImage
           chmod +x barcodehid-linux-x86_64.AppImage
 
+      # ── Upload artifacts ───────────────────────────────────────────────────
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
@@ -135,6 +171,7 @@ jobs:
           path: ${{ matrix.artifact }}
           retention-days: 1
 
+  # ── Publish release ────────────────────────────────────────────────────────
   release:
     name: Publish Release
     needs: build
@@ -168,11 +205,18 @@ jobs:
 
             ### Downloads
 
-            | File | Platform |
-            |---|---|
-            | `barcodehid-linux-x86_64.AppImage` | Linux x64 (any distro) |
-            | `barcodehid-windows-amd64.exe` | Windows x64 |
-            | `barcodehid-macos-amd64` | macOS Intel |
-            | `barcodehid-macos-arm64` | macOS Apple Silicon |
+            | File | Platform | Notes |
+            |---|---|---|
+            | `barcodehid-linux-x86_64.AppImage` | Linux x64 | Any distro |
+            | `barcodehid-windows-amd64.exe` | Windows x64 | Icon + version info embedded |
+            | `BarcodeHID-macos-amd64.app.zip` | macOS Intel | Unzip → drag to Applications |
+            | `BarcodeHID-macos-arm64.app.zip` | macOS Apple Silicon | Unzip → drag to Applications |
 
-            See [README.md](README.md) for setup and usage instructions.
+            ### macOS first run
+            ```
+            xattr -d com.apple.quarantine BarcodeHID.app
+            open BarcodeHID.app
+            # System Settings → Privacy → Accessibility → add BarcodeHID
+            ```
+
+            See [README.md](README.md) for full setup instructions.

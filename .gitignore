@@ -23,6 +23,9 @@ scans.log
 # Remove this line if you want to track beep.mp3
 assets/beep.mp3
 
+# Generated at build time by goversioninfo (Windows icon embedding)
+resource.syso
+
 # Go
 vendor/
 
