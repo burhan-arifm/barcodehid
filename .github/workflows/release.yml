@@ -23,7 +23,7 @@ jobs:
             runner: ubuntu-latest
             goos: linux
             goarch: amd64
-            cgo: "0"
+            cgo: "1" # systray requires CGo on Linux
             out: barcodehid
             appimage: true
             artifact: barcodehid-linux-x86_64.AppImage
@@ -62,6 +62,34 @@ jobs:
         with:
           go-version: "1.22"
           cache: true
+
+      # ── Ensure qrcode.min.js is present ──────────────────────────────────────
+      - name: Download qrcode.min.js if missing
+        if: runner.os != 'Windows'
+        run: |
+          if [ ! -f "assets/qrcode.min.js" ]; then
+            echo "Downloading qrcode.min.js from npm registry..."
+            curl -fsSL "https://registry.npmjs.org/qrcodejs2/-/qrcodejs2-0.0.2.tgz"               -o /tmp/qrcodejs.tgz
+            tar -xzf /tmp/qrcodejs.tgz -C /tmp/
+            cp /tmp/package/qrcode.min.js assets/qrcode.min.js
+            echo "Downloaded: $(wc -c < assets/qrcode.min.js) bytes"
+          else
+            echo "qrcode.min.js already present: $(wc -c < assets/qrcode.min.js) bytes"
+          fi
+
+      - name: Download qrcode.min.js if missing (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "assets/qrcode.min.js")) {
+            Write-Host "Downloading qrcode.min.js from npm registry..."
+            Invoke-WebRequest -Uri "https://registry.npmjs.org/qrcodejs2/-/qrcodejs2-0.0.2.tgz" `
+              -OutFile "$env:TEMP\qrcodejs.tgz"
+            tar -xzf "$env:TEMP\qrcodejs.tgz" -C "$env:TEMP"
+            Copy-Item "$env:TEMP\package\qrcode.min.js" "assets\qrcode.min.js"
+          } else {
+            Write-Host "qrcode.min.js already present"
+          }
 
       # ── Platform build dependencies ────────────────────────────────────────
       - name: Install Linux build dependencies
@@ -140,6 +168,8 @@ jobs:
           chmod +x packaging/macos/make-app-bundle.sh
           bash packaging/macos/make-app-bundle.sh \
             ${{ matrix.out }} dist/
+          # Verify zip was created
+          ls -lh dist/
 
       # ── Linux AppImage ─────────────────────────────────────────────────────
       - name: Build AppImage
@@ -151,24 +181,47 @@ jobs:
           chmod +x appimagetool
 
           mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
 
-          cp ${{ matrix.out }}                                      AppDir/usr/bin/barcodehid
-          cp packaging/appimage/AppRun                             AppDir/AppRun
-          cp packaging/appimage/barcodehid.desktop                 AppDir/barcodehid.desktop
-          cp packaging/appimage/barcodehid.svg                     AppDir/barcodehid.svg
-          cp packaging/appimage/barcodehid.svg                     AppDir/usr/share/icons/hicolor/scalable/apps/barcodehid.svg
+          cp ${{ matrix.out }}                                AppDir/usr/bin/barcodehid
+          cp packaging/appimage/AppRun                       AppDir/AppRun
+          cp packaging/appimage/barcodehid.desktop           AppDir/barcodehid.desktop
+          # PNG at root — used by AppImage runtime and KDE for launcher icon
+          cp packaging/appimage/barcodehid.png               AppDir/barcodehid.png
+          # SVG in hicolor tree — used by desktop environments
+          cp packaging/appimage/barcodehid.svg               AppDir/usr/share/icons/hicolor/scalable/apps/barcodehid.svg
+          # PNG in hicolor tree — fallback for DEs that prefer PNG
+          cp packaging/appimage/barcodehid.png               AppDir/usr/share/icons/hicolor/256x256/apps/barcodehid.png
           chmod +x AppDir/usr/bin/barcodehid AppDir/AppRun
 
           ARCH=x86_64 ./appimagetool AppDir barcodehid-linux-x86_64.AppImage
           chmod +x barcodehid-linux-x86_64.AppImage
 
       # ── Upload artifacts ───────────────────────────────────────────────────
-      - name: Upload artifact
+      - name: Upload Linux AppImage
+        if: matrix.appimage == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: barcodehid-linux-x86_64.AppImage
+          path: barcodehid-linux-x86_64.AppImage
+          retention-days: 1
+
+      - name: Upload Windows binary
+        if: matrix.goos == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: barcodehid-windows-amd64.exe
+          path: barcodehid-windows-amd64.exe
+          retention-days: 1
+
+      - name: Upload macOS bundle
+        if: matrix.goos == 'darwin'
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          # Path is inside dist/ — must match where make-app-bundle.sh puts it
+          path: dist/${{ matrix.artifact }}
           retention-days: 1
 
   # ── Publish release ────────────────────────────────────────────────────────
@@ -213,7 +266,7 @@ jobs:
             | `BarcodeHID-macos-arm64.app.zip` | macOS Apple Silicon | Unzip → drag to Applications |
 
             ### macOS first run
-            ```
+            ```bash
             xattr -d com.apple.quarantine BarcodeHID.app
             open BarcodeHID.app
             # System Settings → Privacy → Accessibility → add BarcodeHID

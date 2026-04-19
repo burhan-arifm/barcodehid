@@ -24,7 +24,7 @@ jobs:
             runner: ubuntu-latest
             goos: linux
             goarch: amd64
-            cgo: "0"
+            cgo: "1" # systray requires CGo on Linux
             out: barcodehid
             appimage: true
 
@@ -59,6 +59,34 @@ jobs:
         with:
           go-version: "1.22"
           cache: true
+
+      # ── Ensure qrcode.min.js is present ──────────────────────────────────────
+      - name: Download qrcode.min.js if missing
+        if: runner.os != 'Windows'
+        run: |
+          if [ ! -f "assets/qrcode.min.js" ]; then
+            echo "Downloading qrcode.min.js from npm registry..."
+            curl -fsSL "https://registry.npmjs.org/qrcodejs2/-/qrcodejs2-0.0.2.tgz"               -o /tmp/qrcodejs.tgz
+            tar -xzf /tmp/qrcodejs.tgz -C /tmp/
+            cp /tmp/package/qrcode.min.js assets/qrcode.min.js
+            echo "Downloaded: $(wc -c < assets/qrcode.min.js) bytes"
+          else
+            echo "qrcode.min.js already present: $(wc -c < assets/qrcode.min.js) bytes"
+          fi
+
+      - name: Download qrcode.min.js if missing (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "assets/qrcode.min.js")) {
+            Write-Host "Downloading qrcode.min.js from npm registry..."
+            Invoke-WebRequest -Uri "https://registry.npmjs.org/qrcodejs2/-/qrcodejs2-0.0.2.tgz" `
+              -OutFile "$env:TEMP\qrcodejs.tgz"
+            tar -xzf "$env:TEMP\qrcodejs.tgz" -C "$env:TEMP"
+            Copy-Item "$env:TEMP\package\qrcode.min.js" "assets\qrcode.min.js"
+          } else {
+            Write-Host "qrcode.min.js already present"
+          }
 
       # ── Platform build dependencies ────────────────────────────────────────
       - name: Install Linux build dependencies
@@ -151,13 +179,15 @@ jobs:
           chmod +x appimagetool
 
           mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
 
           cp ${{ matrix.out }}                                      AppDir/usr/bin/barcodehid
           cp packaging/appimage/AppRun                             AppDir/AppRun
           cp packaging/appimage/barcodehid.desktop                 AppDir/barcodehid.desktop
-          cp packaging/appimage/barcodehid.svg                     AppDir/barcodehid.svg
-          cp packaging/appimage/barcodehid.svg                     AppDir/usr/share/icons/hicolor/scalable/apps/barcodehid.svg
+          cp packaging/appimage/barcodehid.png               AppDir/barcodehid.png
+          cp packaging/appimage/barcodehid.svg               AppDir/usr/share/icons/hicolor/scalable/apps/barcodehid.svg
+          cp packaging/appimage/barcodehid.png               AppDir/usr/share/icons/hicolor/256x256/apps/barcodehid.png
           chmod +x AppDir/usr/bin/barcodehid AppDir/AppRun
 
           ARCH=x86_64 ./appimagetool AppDir barcodehid-linux-x86_64.AppImage
@@ -185,5 +215,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: BarcodeHID-macos-${{ matrix.goarch }}.app.zip
-          path: dist/BarcodeHID-macos-${{ matrix.goarch }}.app.zip
+          path: dist/BarcodeHID-macos-${{ matrix.goarch }}.app.zip # inside dist/
           retention-days: 7

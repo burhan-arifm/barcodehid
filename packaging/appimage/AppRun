@@ -1,4 +1,25 @@
-#!/usr/bin/env bash
-# AppRun — entry point for BarcodeHID AppImage
-# APPDIR is set automatically by the AppImage runtime to the mount point.
-exec "$APPDIR/usr/bin/barcodehid" "$@"
+#!/bin/sh
+# AppRun — BarcodeHID AppImage entry point
+# Using /bin/sh (not bash) for maximum portability across distros.
+#
+# Default behavior (no args / double-click): run in --tray mode.
+# Explicit terminal mode: ./barcodehid.AppImage --foreground
+
+BINARY="$APPDIR/usr/bin/barcodehid"
+
+# Ensure binary is executable
+chmod +x "$BINARY" 2>/dev/null
+
+# If no arguments, default to tray mode (double-click from file manager)
+if [ $# -eq 0 ]; then
+  exec "$BINARY" --tray
+fi
+
+# --foreground: explicit terminal/foreground mode
+if [ "$1" = "--foreground" ]; then
+  shift
+  exec "$BINARY" "$@"
+fi
+
+# Pass all other args through unchanged
+exec "$BINARY" "$@"

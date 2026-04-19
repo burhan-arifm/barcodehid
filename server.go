@@ -17,6 +17,10 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 )
 
+// gServerURL holds the https:// URL for this server instance.
+// Set by startServer(), used by the /qr.png handler.
+var gServerURL string
+
 // ── Global server state ───────────────────────────────────────────────────────
 
 var (
@@ -71,6 +75,28 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	case "/qr":
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(embeddedQRHTML)
+
+	case "/qrcode.min.js":
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(embeddedQRCodeJS)
+
+	case "/qr.png":
+		// Generate QR PNG server-side using the proven skip2/go-qrcode library.
+		// The URL to encode is the scanner page (https://ip:port).
+		url := gServerURL
+		if url == "" {
+			http.Error(w, "server URL not ready", http.StatusServiceUnavailable)
+			return
+		}
+		png, err := qrcode.Encode(url, qrcode.Medium, 300)
+		if err != nil {
+			http.Error(w, "QR generation failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(png)
 
 	case "/beep.mp3":
 		if len(embeddedBeep) > 0 {
@@ -306,6 +332,9 @@ func startServer(dir string, port int, host string) error {
 	}
 
 	openScanLog(dir)
+
+	// Store server URL for /qr.png handler
+	gServerURL = fmt.Sprintf("https://%s:%d", ip, port)
 
 	printBanner(ip, port)
 	printQR(fmt.Sprintf("https://%s:%d", ip, port))

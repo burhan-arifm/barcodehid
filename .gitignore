@@ -19,7 +19,7 @@ scans.log
 .appimagetool
 .appdir/
 
-# Optional embedded asset — gitignored so repo works without it
+# qrcode.min.js is committed — required for build (embedded in binary)
 # Remove this line if you want to track beep.mp3
 assets/beep.mp3
 

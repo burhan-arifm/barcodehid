@@ -1,161 +1,191 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BarcodeHID — Scan to Connect</title>
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>BarcodeHID — Scan to Connect</title>
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            :root {
+                --bg: #0a0a0f;
+                --accent: #00e5a0;
+                --dim: #5a5a7a;
+                --text: #e8e8f0;
+                --mono: "Courier New", monospace;
+            }
+            html,
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--mono);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            #card {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+                padding: 32px;
+                max-width: 420px;
+                width: 100%;
+            }
+            #logo {
+                font-size: 14px;
+                font-weight: bold;
+                letter-spacing: 4px;
+                color: var(--accent);
+                text-transform: uppercase;
+            }
+            #logo span {
+                color: var(--dim);
+            }
+            #qr-wrap {
+                background: #fff;
+                border-radius: 12px;
+                padding: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 220px;
+                min-height: 220px;
+            }
+            /* QR renders into a div — qrcodejs creates a canvas or img inside it */
+            #qr-container canvas,
+            #qr-container img {
+                display: block;
+                image-rendering: pixelated;
+            }
+            #qr-err {
+                font-size: 11px;
+                color: #ff4757;
+                text-align: center;
+                display: none;
+                max-width: 300px;
+            }
+            #url {
+                font-size: 13px;
+                color: var(--dim);
+                letter-spacing: 1px;
+                word-break: break-all;
+                text-align: center;
+                padding: 10px 16px;
+                border: 1px solid #1e1e2e;
+                border-radius: 8px;
+                width: 100%;
+                cursor: pointer;
+                transition:
+                    border-color 0.2s,
+                    color 0.2s;
+                user-select: all;
+            }
+            #url:hover {
+                border-color: var(--accent);
+                color: var(--text);
+            }
+            #copy-hint {
+                font-size: 10px;
+                letter-spacing: 2px;
+                color: var(--dim);
+                text-transform: uppercase;
+            }
+            #copy-hint.copied {
+                color: var(--accent);
+            }
+            #instructions {
+                font-size: 12px;
+                color: var(--dim);
+                letter-spacing: 0.5px;
+                line-height: 1.8;
+                text-align: center;
+            }
+            #instructions strong {
+                color: var(--text);
+            }
+        </style>
+    </head>
+    <body>
+        <div id="card">
+            <div id="logo">Barcode<span>HID</span></div>
+            <div id="qr-wrap">
+                <div id="qr-container"></div>
+            </div>
+            <div id="qr-err"></div>
+            <div id="url" onclick="copyURL()" title="Click to copy"></div>
+            <div id="copy-hint">click URL to copy</div>
+            <div id="instructions">
+                <strong>First time:</strong> scan QR with phone camera<br />
+                open the link &rarr; proceed past cert warning &rarr; allow
+                camera<br /><br />
+                <strong>Next time:</strong> phone reconnects automatically
+            </div>
+        </div>
 
-:root {
-  --bg:     #0a0a0f;
-  --accent: #00e5a0;
-  --dim:    #5a5a7a;
-  --text:   #e8e8f0;
-  --mono:   'Courier New', monospace;
-}
+        <!--
+  qrcode.min.js is served by barcodehid itself at /qrcode.min.js
+  It is embedded in the binary via go:embed — no CDN, no internet needed.
+  Library: davidshimjs/qrcodejs (MIT license)
+-->
+        <script src="/qrcode.min.js"></script>
+        <script>
+            // Derive scanner URL from current page origin.
+            // This page is served at https://ip:port/qr by barcodehid itself.
+            const l = window.location;
+            const scannerURL = l.protocol + "//" + l.hostname + ":" + l.port;
 
-html, body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--mono);
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+            document.getElementById("url").textContent = scannerURL;
 
-#card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  padding: 32px;
-  max-width: 420px;
-  width: 100%;
-}
+            function renderQR() {
+                const container = document.getElementById("qr-container");
+                const errEl = document.getElementById("qr-err");
 
-#logo {
-  font-size: 14px;
-  font-weight: bold;
-  letter-spacing: 4px;
-  color: var(--accent);
-  text-transform: uppercase;
-}
+                if (typeof QRCode === "undefined") {
+                    errEl.textContent = "QR library failed to load.";
+                    errEl.style.display = "block";
+                    return;
+                }
 
-#logo span { color: var(--dim); }
+                try {
+                    new QRCode(container, {
+                        text: scannerURL,
+                        width: 220,
+                        height: 220,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.M,
+                    });
+                } catch (e) {
+                    errEl.textContent = "QR generation failed: " + e.message;
+                    errEl.style.display = "block";
+                }
+            }
 
-#qr-wrap {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+            // Run after qrcode.min.js is loaded
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", renderQR);
+            } else {
+                renderQR();
+            }
 
-#qr-wrap canvas, #qr-wrap img {
-  display: block;
-  width: 220px;
-  height: 220px;
-}
-
-#url {
-  font-size: 13px;
-  color: var(--dim);
-  letter-spacing: 1px;
-  word-break: break-all;
-  text-align: center;
-  padding: 10px 16px;
-  border: 1px solid #1e1e2e;
-  border-radius: 8px;
-  width: 100%;
-  cursor: pointer;
-  transition: border-color .2s, color .2s;
-  user-select: all;
-}
-
-#url:hover { border-color: var(--accent); color: var(--text); }
-
-#copy-hint {
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: var(--dim);
-  text-transform: uppercase;
-}
-
-#copy-hint.copied { color: var(--accent); }
-
-#instructions {
-  font-size: 12px;
-  color: var(--dim);
-  letter-spacing: .5px;
-  line-height: 1.8;
-  text-align: center;
-}
-
-#instructions strong { color: var(--text); }
-</style>
-</head>
-<body>
-<div id="card">
-  <div id="logo">Barcode<span>HID</span></div>
-
-  <div id="qr-wrap">
-    <canvas id="qr-canvas"></canvas>
-  </div>
-
-  <div id="url" onclick="copyURL()" title="Click to copy"></div>
-  <div id="copy-hint">click URL to copy</div>
-
-  <div id="instructions">
-    <strong>First time:</strong> scan QR with phone camera<br>
-    open the link → proceed past cert warning → allow camera<br><br>
-    <strong>Next time:</strong> phone reconnects automatically
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-<script>
-// The server injects the wss:// URL into the page as a data attribute
-// on the body, or we derive it from window.location.
-function getWSUrl() {
-  // Derive from current page origin (served by barcodehid itself)
-  const l = window.location;
-  const scheme = l.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${scheme}//${l.hostname}:${l.port}`;
-}
-
-function getScannerUrl() {
-  const l = window.location;
-  return `${l.protocol}//${l.hostname}:${l.port}`;
-}
-
-const scannerUrl = getScannerUrl();
-const wsUrl      = getWSUrl();
-
-// Render QR code
-QRCode.toCanvas(
-  document.getElementById('qr-canvas'),
-  scannerUrl,
-  { width: 220, margin: 0, color: { dark: '#000000', light: '#ffffff' } },
-  err => { if (err) console.error('QR error:', err); }
-);
-
-// Show URL
-document.getElementById('url').textContent = wsUrl;
-
-function copyURL() {
-  navigator.clipboard.writeText(wsUrl).then(() => {
-    const hint = document.getElementById('copy-hint');
-    hint.textContent = '✔ copied!';
-    hint.classList.add('copied');
-    setTimeout(() => {
-      hint.textContent = 'click URL to copy';
-      hint.classList.remove('copied');
-    }, 2000);
-  });
-}
-</script>
-</body>
+            function copyURL() {
+                navigator.clipboard.writeText(scannerURL).then(() => {
+                    const hint = document.getElementById("copy-hint");
+                    hint.textContent = "\u2714 copied!";
+                    hint.classList.add("copied");
+                    setTimeout(() => {
+                        hint.textContent = "click URL to copy";
+                        hint.classList.remove("copied");
+                    }, 2000);
+                });
+            }
+        </script>
+    </body>
 </html>
