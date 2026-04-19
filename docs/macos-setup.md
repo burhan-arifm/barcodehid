@@ -1,5 +1,16 @@
 # BarcodeHID — macOS Setup Guide
 
+> ⚠️ **Current macOS status**
+>
+> | Feature | Status |
+> |---|---|
+> | Barcode scanning | ✅ Works |
+> | Keyboard simulation (HID) | ✅ Works |
+> | Background / tray mode | ⚠️ Not yet supported |
+>
+> The app runs in foreground (terminal) mode on macOS.
+> Tray support is planned for a future release.
+
 This guide walks you through installing and running BarcodeHID on macOS
 from scratch. No technical experience required.
 
@@ -89,33 +100,40 @@ when a barcode is scanned. macOS requires you to grant this manually.
 
 ## Step 5 — Run the app
 
-1. Double-click **BarcodeHID** in Applications (or click it in Finder)
+Open **Terminal** and run:
 
-2. A notification appears in the top-right corner of your screen:
-   ```
-   BarcodeHID is running
-   Open on your phone: https://192.168.x.x:8765
-   ```
+```bash
+/Applications/BarcodeHID.app/Contents/MacOS/barcodehid
+```
 
-3. A small **BarcodeHID icon** appears in your **menu bar** (top-right,
-   near the clock). This means the app is running in the background.
+You will see a QR code printed in the terminal along with the server URL:
 
-> If you see **"BarcodeHID cannot be opened because it is from an
-> unidentified developer"** → go back to Step 3 and make sure you ran
-> the `xattr` command.
+```
+  Scanner    https://192.168.x.x:8765
+  WebSocket  wss://192.168.x.x:8765
+  ...
 
-> If you see **"BarcodeHID" wants access to control your computer** →
-> click **OK** and go back to Step 4 to grant Accessibility permission.
+  Scan with your phone camera:
+  [QR code appears here]
+```
+
+> If you see **"Accessibility permission required"** → go back to Step 4.
+
+> If you see **"BarcodeHID cannot be opened"** → go back to Step 3 and
+> make sure you ran the `xattr` command.
+
+Keep this terminal window open while using BarcodeHID.
+Press `Ctrl+C` to stop the server.
+
+> **Note:** Background/tray mode is not yet supported on macOS.
+> The terminal window must stay open while the app is running.
+> This limitation will be addressed in a future release.
 
 ---
 
 ## Step 6 — Connect your phone
 
-1. **Right-click** (or two-finger click) the BarcodeHID icon in the menu bar
-2. Click **Show QR Code**
-3. A page opens in your browser showing a QR code
-
-4. On your phone:
+1. On your phone:
    - Open the **camera app**
    - Point it at the QR code on your screen
    - Tap the notification/link that appears
@@ -142,28 +160,14 @@ when a barcode is scanned. macOS requires you to grant this manually.
 
 ---
 
-## Menu bar controls
-
-Right-click the BarcodeHID icon in the menu bar to:
-
-| Option | What it does |
-|---|---|
-| **Connected / Not connected** | Shows current phone status |
-| **Show QR Code** | Opens the pairing page in your browser |
-| **Copy wss:// URL** | Copies the server address to clipboard |
-| **Auto-start on login** | Toggle: start BarcodeHID automatically when you log in |
-| **Quit BarcodeHID** | Stop the server and exit |
-
----
-
 ## Auto-start on login (optional)
 
-If you want BarcodeHID to start automatically every time you log in:
+Since background/tray mode is not yet supported, auto-start on macOS
+is not available. You will need to start BarcodeHID manually from
+Terminal each time.
 
-1. Right-click the menu bar icon
-2. Click **Auto-start on login** to enable it (checkmark appears)
-
-To disable: click it again to uncheck.
+Once tray mode is supported in a future release, auto-start will be
+added as a menu option.
 
 ---
 

@@ -5,8 +5,8 @@ package main
 // notify_stub.go
 // Desktop notifications for Windows and macOS.
 //
-// macOS: uses osascript (built-in, no dependencies)
-// Windows: uses PowerShell toast notification (built-in, no dependencies)
+// macOS:   osascript (always available, no dependencies)
+// Windows: PowerShell toast (Windows 10+, no dependencies)
 
 import (
 	"fmt"
@@ -18,15 +18,10 @@ func notify(title, body string) {
 	switch runtime.GOOS {
 
 	case "darwin":
-		// osascript is always available on macOS
-		script := fmt.Sprintf(
-			`display notification %q with title %q`,
-			body, title,
-		)
+		script := fmt.Sprintf(`display notification %q with title %q`, body, title)
 		_ = exec.Command("osascript", "-e", script).Run()
 
 	case "windows":
-		// PowerShell toast notification — works on Windows 10+
 		script := fmt.Sprintf(`
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType=WindowsRuntime] | Out-Null
@@ -53,7 +48,7 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 func notifyRunning(ip string, port int) {
 	notify(
 		"BarcodeHID is running",
-		fmt.Sprintf("Open on your phone:\nhttps://%s:%d\n\nRight-click menu bar icon to show QR.", ip, port),
+		fmt.Sprintf("Open on your phone:\nhttps://%s:%d\n\nRight-click tray icon to show QR.", ip, port),
 	)
 }
 
@@ -61,21 +56,5 @@ func notifyAlreadyRunning(ip string, port int) {
 	notify(
 		"BarcodeHID is already running",
 		fmt.Sprintf("Server at:\nhttps://%s:%d\n\nOpening QR code page…", ip, port),
-	)
-}
-
-// notifyAccessibilityRequired is called on macOS when the app starts
-// without Accessibility permission. Lets the user know via notification
-// rather than silently failing.
-func notifyAccessibilityRequired() {
-	if runtime.GOOS != "darwin" {
-		return
-	}
-	notify(
-		"BarcodeHID — Action required",
-		"Keyboard simulation is disabled.\n\n"+
-			"To enable: System Settings → Privacy & Security\n"+
-			"→ Accessibility → + → BarcodeHID → toggle ON\n"+
-			"Then restart the app.",
 	)
 }

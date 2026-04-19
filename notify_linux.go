@@ -51,6 +51,3 @@ func notifyAlreadyRunning(ip string, port int) {
 		fmt.Sprintf("Server is at:\nhttps://%s:%d\n\nOpening QR code page…", ip, port),
 	)
 }
-
-// notifyAccessibilityRequired is a no-op on Linux (not applicable).
-func notifyAccessibilityRequired() {}

@@ -287,30 +287,31 @@ jobs:
 
             ---
 
-            ### macOS — important: three steps before first run
+            ### macOS
 
-            > ⚠️ Skipping any of these steps causes the app to open silently with no feedback.
+            > ⚠️ **Tray/background mode is not yet supported on macOS.**
+            > The app runs in foreground (terminal) mode only.
+            > Scanning and keyboard simulation work correctly.
 
-            **Step 1 — Unzip and move to Applications**
-            Unzip the downloaded `.app.zip` and drag `BarcodeHID.app` to your Applications folder.
+            **1. Unzip** — drag `BarcodeHID.app` to Applications.
 
-            **Step 2 — Remove quarantine flag** (macOS blocks all unsigned downloaded apps)
+            **2. Remove quarantine flag:**
             ```bash
             xattr -d com.apple.quarantine /Applications/BarcodeHID.app
             ```
 
-            **Step 3 — Grant Accessibility permission** (required for keyboard simulation)
+            **3. Grant Accessibility permission:**
             ```
             System Settings → Privacy & Security → Accessibility → + → BarcodeHID → toggle ON
             ```
-            The app exits silently without this. If nothing happens when you open it, this is why.
 
-            **Then open the app:**
-            Double-click `BarcodeHID` in Applications. A notification appears and a
-            menu bar icon shows in the top-right of your screen.
-            Right-click the menu bar icon → **Show QR Code** → scan with phone camera.
+            **4. Run from terminal:**
+            ```bash
+            /Applications/BarcodeHID.app/Contents/MacOS/barcodehid
+            ```
+            QR code appears in terminal — scan with phone to connect. `Ctrl+C` to stop.
 
-            📖 **Full macOS guide:** [docs/macos-setup.md](docs/macos-setup.md)
+            📖 [Full macOS guide](docs/macos-setup.md)
 
             ---
 
