@@ -42,7 +42,6 @@ int check_accessibility() {
 import "C"
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -161,23 +160,37 @@ func checkAccessibility() bool {
 // both variants use the same CGEvent API.
 func newKeyboard() Keyboard {
 	if !checkAccessibility() {
-		fmt.Println()
-		printFail("Accessibility permission required.")
-		fmt.Println()
-		fmt.Println("  BarcodeHID needs permission to send keyboard events.")
-		fmt.Println("  Please follow these steps:")
-		fmt.Println()
-		fmt.Println("  1. Open System Settings → Privacy & Security → Accessibility")
-		fmt.Println("  2. Click the + button")
-		fmt.Println("  3. Navigate to barcodehid and add it")
-		fmt.Println("  4. Make sure the toggle next to barcodehid is ON")
-		fmt.Println("  5. Re-run barcodehid")
-		fmt.Println()
-		fmt.Println("  (This is a one-time setup — macOS remembers it.)")
-		fmt.Println()
-		noBackendExit()
+		// Don't exit — return a stub keyboard that prompts for permission
+		// on first use. This allows the tray to start normally so the user
+		// can see the notification and menu bar icon.
+		printWarn("Accessibility permission not granted — keyboard simulation disabled")
+		printWarn("Grant permission: System Settings → Privacy & Security → Accessibility")
+		return &NoPermKeyboard{}
 	}
 
-	printOK("HID: CGEvent Core Graphics API (no additional setup required)")
+	printOK("HID: CGEvent Core Graphics API (X11 + Wayland equivalent on macOS)")
 	return &CGKeyboard{}
+}
+
+// NoPermKeyboard is a stub used when Accessibility permission is missing.
+// It shows a notification on first scan attempt prompting the user to
+// grant permission, rather than crashing the app on startup.
+type NoPermKeyboard struct{ notified bool }
+
+func (n *NoPermKeyboard) TypeString(s string) {
+	if !n.notified {
+		n.notified = true
+		notify(
+			"Accessibility permission required",
+			"BarcodeHID cannot type keyboard input.\n\n"+
+				"System Settings → Privacy & Security → Accessibility\n"+
+				"→ add BarcodeHID → toggle ON → restart app",
+		)
+	}
+}
+
+func (n *NoPermKeyboard) PressEnter() {}
+func (n *NoPermKeyboard) Close()      {}
+func (n *NoPermKeyboard) Mode() string {
+	return "no permission (Accessibility access required)"
 }

@@ -63,3 +63,19 @@ func notifyAlreadyRunning(ip string, port int) {
 		fmt.Sprintf("Server at:\nhttps://%s:%d\n\nOpening QR code page…", ip, port),
 	)
 }
+
+// notifyAccessibilityRequired is called on macOS when the app starts
+// without Accessibility permission. Lets the user know via notification
+// rather than silently failing.
+func notifyAccessibilityRequired() {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	notify(
+		"BarcodeHID — Action required",
+		"Keyboard simulation is disabled.\n\n"+
+			"To enable: System Settings → Privacy & Security\n"+
+			"→ Accessibility → + → BarcodeHID → toggle ON\n"+
+			"Then restart the app.",
+	)
+}
