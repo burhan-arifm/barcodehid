@@ -102,6 +102,15 @@ cat > "$CONTENTS/Info.plist" << PLIST
 
   <key>NSAccessibilityUsageDescription</key>
   <string>BarcodeHID needs Accessibility access to simulate keyboard input from barcode scans.</string>
+
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+
+  <key>NSSupportsAutomaticTermination</key>
+  <false/>
+
+  <key>NSSupportsSuddenTermination</key>
+  <false/>
 </dict>
 </plist>
 PLIST

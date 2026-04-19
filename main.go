@@ -144,27 +144,33 @@ func runTrayMode(dir string) {
 	// Write URL to lockfile so a second instance can find us
 	writeLockFile(serverURL)
 
-	// Detach immediately — no waiting for phone connection.
-	// The tray icon + notification give the user everything they need.
-	if os.Getenv("BARCODEHID_DAEMON") == "1" {
-		// We are the daemon child — overwrite lockfile with our PID,
-		// send startup notification, then run the tray event loop.
-		writeLockFile(serverURL)
-		notifyRunning(ip, port)
-		initTray(serverURL, wsURL)
-		releaseLock()
-		return
+	// Detach from terminal immediately, then run tray.
+	//
+	// Linux: re-execs as daemon child. Parent exits here, child continues
+	//        past detachFromTerminal() with BARCODEHID_DAEMON=1.
+	// macOS: detaches in-place (no fork). detachFromTerminal() always
+	//        returns true, so we continue directly to tray on same process.
+
+	isDaemon := os.Getenv("BARCODEHID_DAEMON") == "1"
+
+	if !isDaemon {
+		// First run — attempt to detach
+		if !detachFromTerminal() {
+			// Linux parent: print brief message and exit.
+			// The re-execed child will send the notification and show tray.
+			printOK("BarcodeHID started in background")
+			printInfo("Check your system tray for the tray icon")
+			os.Exit(0)
+		}
+		// macOS: detached in-place, continues here on same process
+		// Linux child: re-execed with BARCODEHID_DAEMON=1, falls through below
 	}
 
-	// We are the parent — fork to background immediately.
-	if !detachFromTerminal() {
-		// Parent: print a brief message then exit.
-		// Child continues as the background daemon.
-		printOK("BarcodeHID started in background")
-		printInfo("Check your system tray for the tray icon")
-		printInfo("Right-click tray → Show QR to pair your phone")
-		os.Exit(0)
-	}
-	// Child reaches here — handled above in the BARCODEHID_DAEMON branch
-	// after re-exec, so this point is never reached.
+	// Write our PID + URL to lockfile (overwrites parent PID if daemon child)
+	writeLockFile(serverURL)
+	defer releaseLock()
+
+	// Send startup notification and show tray
+	notifyRunning(ip, port)
+	initTray(serverURL, wsURL)
 }

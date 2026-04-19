@@ -86,25 +86,33 @@ The project is open source — build it yourself to verify.
 
 ### macOS
 
+BarcodeHID runs as a **menu bar app** — no window, no Dock icon. After
+launching, look for the icon in the top-right menu bar.
+
+**Full step-by-step guide: [docs/macos-setup.md](docs/macos-setup.md)**
+
+Quick version:
+
+**1. Remove the quarantine flag** (one-time — macOS blocks unsigned downloads)
 ```bash
-# Remove quarantine flag applied to unsigned downloads
-xattr -d com.apple.quarantine barcodehid-macos-arm64   # or amd64
-
-chmod +x barcodehid-macos-arm64
-./barcodehid-macos-arm64
+xattr -d com.apple.quarantine /Applications/BarcodeHID.app
 ```
 
-On first run, barcodehid checks for Accessibility permission. If missing,
-it prints step-by-step instructions and exits cleanly:
-
+**2. Grant Accessibility permission** (one-time — required to simulate keyboard input)
 ```
-1. System Settings → Privacy & Security → Accessibility
-2. Click + and add barcodehid
-3. Make sure the toggle is ON
-4. Re-run barcodehid
+System Settings → Privacy & Security → Accessibility → + → BarcodeHID → toggle ON
 ```
 
-This is a one-time step — macOS remembers it permanently.
+**3. Open the app**
+```bash
+open /Applications/BarcodeHID.app
+```
+A notification appears and the BarcodeHID icon shows in the menu bar.
+Right-click it → **Show QR Code** to pair your phone.
+
+> **Seeing nothing after step 1?** That means Accessibility permission is
+> missing — go to step 2. The app is designed to be invisible (menu bar only)
+> so a silent launch is normal until Accessibility is granted.
 
 ---
 
