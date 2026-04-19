@@ -253,23 +253,70 @@ jobs:
           body: |
             ## BarcodeHID ${{ github.ref_name }}
 
-            Scan barcodes with your Android phone → keyboard input on your PC.
-            Single-file. No drivers. No installation.
+            Scan barcodes with your Android or iPhone camera → keyboard input on your PC.
+            Single-file distribution. No drivers. No installation.
+
+            ---
 
             ### Downloads
 
-            | File | Platform | Notes |
-            |---|---|---|
-            | `barcodehid-linux-x86_64.AppImage` | Linux x64 | Any distro |
-            | `barcodehid-windows-amd64.exe` | Windows x64 | Icon + version info embedded |
-            | `BarcodeHID-macos-amd64.app.zip` | macOS Intel | Unzip → drag to Applications |
-            | `BarcodeHID-macos-arm64.app.zip` | macOS Apple Silicon | Unzip → drag to Applications |
+            | File | Platform |
+            |---|---|
+            | `barcodehid-linux-x86_64.AppImage` | Linux x64 (any distro) |
+            | `barcodehid-windows-amd64.exe` | Windows x64 |
+            | `BarcodeHID-macos-arm64.app.zip` | macOS Apple Silicon (M1/M2/M3/M4) |
+            | `BarcodeHID-macos-amd64.app.zip` | macOS Intel |
 
-            ### macOS first run
+            ---
+
+            ### Linux
             ```bash
-            xattr -d com.apple.quarantine BarcodeHID.app
-            open BarcodeHID.app
-            # System Settings → Privacy → Accessibility → add BarcodeHID
+            chmod +x barcodehid-linux-x86_64.AppImage
+            ./barcodehid-linux-x86_64.AppImage
+            # Tray icon appears + notification with connection URL
+            # Right-click tray → Show QR Code → scan with phone
+            ```
+            For real kernel-level HID (works in terminals/games too): `bash setup.sh`
+
+            ---
+
+            ### Windows
+            Just run `barcodehid-windows-amd64.exe`.
+            Tray icon appears in the system tray (bottom-right).
+            Right-click → **Show QR Code** → scan with phone.
+
+            ---
+
+            ### macOS — important: three steps before first run
+
+            > ⚠️ Skipping any of these steps causes the app to open silently with no feedback.
+
+            **Step 1 — Unzip and move to Applications**
+            Unzip the downloaded `.app.zip` and drag `BarcodeHID.app` to your Applications folder.
+
+            **Step 2 — Remove quarantine flag** (macOS blocks all unsigned downloaded apps)
+            ```bash
+            xattr -d com.apple.quarantine /Applications/BarcodeHID.app
             ```
 
-            See [README.md](README.md) for full setup instructions.
+            **Step 3 — Grant Accessibility permission** (required for keyboard simulation)
+            ```
+            System Settings → Privacy & Security → Accessibility → + → BarcodeHID → toggle ON
+            ```
+            The app exits silently without this. If nothing happens when you open it, this is why.
+
+            **Then open the app:**
+            Double-click `BarcodeHID` in Applications. A notification appears and a
+            menu bar icon shows in the top-right of your screen.
+            Right-click the menu bar icon → **Show QR Code** → scan with phone camera.
+
+            📖 **Full macOS guide:** [docs/macos-setup.md](docs/macos-setup.md)
+
+            ---
+
+            ### All platforms — first connection
+            1. Right-click tray/menu bar icon → **Show QR Code**
+            2. Scan QR with phone camera → browser opens
+            3. First visit: tap through the certificate warning (self-signed, local only)
+            4. Allow camera access
+            5. Scanner is ready — click a text field on your PC, then scan a barcode
